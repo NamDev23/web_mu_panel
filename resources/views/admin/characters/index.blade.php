@@ -91,6 +91,7 @@
             border-radius: 15px;
             border: 1px solid rgba(255, 255, 255, 0.2);
             overflow: hidden;
+            position: relative;
         }
         .table-header {
             background: rgba(255, 255, 255, 0.1);
@@ -104,23 +105,66 @@
         }
         .table-responsive {
             overflow-x: auto;
+            max-height: 70vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .table-responsive::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .table-responsive::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        .table-responsive::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+        .table-responsive::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        .scroll-indicator {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            background: rgba(59, 130, 246, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 5;
+            animation: pulse 2s infinite;
+            pointer-events: none;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
         }
         table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 1200px;
         }
         th, td {
             padding: 15px 20px;
             text-align: left;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            white-space: nowrap;
         }
         th {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.15);
             color: white;
             font-weight: 600;
             font-size: 14px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            backdrop-filter: blur(16px);
         }
         td {
             color: white;
@@ -211,6 +255,63 @@
             margin-bottom: 20px;
             text-align: center;
         }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .search-form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .form-control {
+                min-width: auto;
+                width: 100%;
+            }
+            .btn {
+                width: 100%;
+                margin-top: 10px;
+            }
+            .table-responsive {
+                max-height: 60vh;
+            }
+            th, td {
+                padding: 10px 8px;
+                font-size: 12px;
+            }
+            .action-buttons {
+                flex-direction: column;
+                gap: 4px;
+            }
+            .btn-sm {
+                padding: 4px 8px;
+                font-size: 10px;
+            }
+            .page-header {
+                padding: 20px;
+            }
+            .page-title {
+                font-size: 22px;
+            }
+            .search-section {
+                padding: 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 15px;
+            }
+            .table-responsive {
+                max-height: 50vh;
+            }
+            th, td {
+                padding: 8px 6px;
+                font-size: 11px;
+            }
+            .status-badge, .level-badge, .server-badge {
+                font-size: 10px;
+                padding: 2px 6px;
+            }
+        }
 </style>
 @endsection
 
@@ -266,7 +367,8 @@
             </div>
 
             @if($characters->count() > 0)
-                <div class="table-responsive">
+                <div class="table-responsive" id="tableContainer">
+                    <div class="scroll-indicator" id="scrollIndicator">← Vuốt để xem thêm →</div>
                     <table>
                         <thead>
                             <tr>
@@ -325,4 +427,48 @@
                 </div>
             @endif
         </div>
+@endsection
+
+@section('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tableContainer = document.getElementById('tableContainer');
+    const scrollIndicator = document.getElementById('scrollIndicator');
+
+    if (tableContainer && scrollIndicator) {
+        // Check if table needs horizontal scrolling
+        function checkScrollNeeded() {
+            const needsScroll = tableContainer.scrollWidth > tableContainer.clientWidth;
+            if (needsScroll) {
+                scrollIndicator.style.display = 'block';
+            } else {
+                scrollIndicator.style.display = 'none';
+            }
+        }
+
+        // Hide indicator when user starts scrolling
+        tableContainer.addEventListener('scroll', function() {
+            if (tableContainer.scrollLeft > 10) {
+                scrollIndicator.style.display = 'none';
+            } else {
+                checkScrollNeeded();
+            }
+        });
+
+        // Check on load and resize
+        checkScrollNeeded();
+        window.addEventListener('resize', checkScrollNeeded);
+
+        // Auto-hide after 5 seconds
+        setTimeout(function() {
+            if (scrollIndicator.style.display !== 'none') {
+                scrollIndicator.style.opacity = '0';
+                setTimeout(function() {
+                    scrollIndicator.style.display = 'none';
+                }, 500);
+            }
+        }, 5000);
+    }
+});
+</script>
 @endsection
