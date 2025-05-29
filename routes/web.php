@@ -13,9 +13,55 @@ use Illuminate\Support\Facades\Session;
 |
 */
 
-// Default route - redirect to UserCP
+// Default route - redirect to User Site
 Route::get('/', function () {
-	return redirect('/UserCP');
+	return redirect('/user');
+});
+
+
+
+// User Site Routes
+Route::group(['prefix' => 'user', 'middleware' => 'web'], function () {
+	// Authentication routes (no middleware)
+	Route::get('/login', [App\Http\Controllers\User\AuthController::class, 'showLogin'])->name('user.login');
+	Route::post('/login', [App\Http\Controllers\User\AuthController::class, 'login'])->name('user.login.post');
+	Route::get('/register', [App\Http\Controllers\User\AuthController::class, 'showRegister'])->name('user.register');
+	Route::post('/register', [App\Http\Controllers\User\AuthController::class, 'register'])->name('user.register.post');
+	Route::get('/forgot-password', [App\Http\Controllers\User\AuthController::class, 'showForgotPassword'])->name('user.forgot-password');
+	Route::post('/forgot-password', [App\Http\Controllers\User\AuthController::class, 'forgotPassword'])->name('user.forgot-password.post');
+	Route::post('/logout', [App\Http\Controllers\User\AuthController::class, 'logout'])->name('user.logout');
+
+	// Protected user routes
+	Route::middleware('user.auth')->group(function () {
+		// Dashboard
+		Route::get('/', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('user.dashboard');
+		Route::get('/dashboard', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('user.dashboard.alt');
+		Route::get('/api/quick-stats', [App\Http\Controllers\User\DashboardController::class, 'getQuickStats'])->name('user.api.quick-stats');
+
+		// Recharge routes
+		Route::get('/recharge', [App\Http\Controllers\User\RechargeController::class, 'index'])->name('user.recharge');
+		Route::post('/recharge/card', [App\Http\Controllers\User\RechargeController::class, 'cardRecharge'])->name('user.recharge.card');
+		Route::post('/recharge/bank', [App\Http\Controllers\User\RechargeController::class, 'bankTransfer'])->name('user.recharge.bank');
+		Route::get('/recharge/history', [App\Http\Controllers\User\RechargeController::class, 'history'])->name('user.recharge.history');
+		Route::get('/recharge/{id}', [App\Http\Controllers\User\RechargeController::class, 'show'])->name('user.recharge.show');
+
+		// Withdraw routes
+		Route::get('/withdraw', [App\Http\Controllers\User\WithdrawController::class, 'index'])->name('user.withdraw');
+		Route::post('/withdraw', [App\Http\Controllers\User\WithdrawController::class, 'withdraw'])->name('user.withdraw.post');
+		Route::get('/withdraw/history', [App\Http\Controllers\User\WithdrawController::class, 'history'])->name('user.withdraw.history');
+		Route::get('/withdraw/{id}', [App\Http\Controllers\User\WithdrawController::class, 'show'])->name('user.withdraw.show');
+
+		// Giftcode routes
+		Route::get('/giftcode', [App\Http\Controllers\User\GiftcodeController::class, 'index'])->name('user.giftcode');
+		Route::post('/giftcode/redeem', [App\Http\Controllers\User\GiftcodeController::class, 'redeem'])->name('user.giftcode.redeem');
+		Route::get('/giftcode/history', [App\Http\Controllers\User\GiftcodeController::class, 'history'])->name('user.giftcode.history');
+		Route::get('/giftcode/active', [App\Http\Controllers\User\GiftcodeController::class, 'getActiveGiftcodes'])->name('user.giftcode.active');
+
+		// Profile routes (will be implemented later)
+		Route::get('/profile', function () {
+			return view('user.profile.index');
+		})->name('user.profile');
+	});
 });
 
 // Admin Panel SPA Route
