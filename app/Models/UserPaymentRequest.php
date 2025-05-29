@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class UserPaymentRequest extends Model
 {
@@ -41,7 +42,7 @@ class UserPaymentRequest extends Model
 
     public function processedBy()
     {
-        return $this->belongsTo(\DB::table('admin_users'), 'processed_by');
+        return $this->belongsTo(DB::table('admin_users'), 'processed_by');
     }
 
     // Status methods
@@ -133,14 +134,15 @@ class UserPaymentRequest extends Model
     public static function generateBankQRData($amount, $userId, $requestId)
     {
         $transferContent = "NAPGAME {$userId} {$requestId}";
-        
+
         return [
-            'bank_name' => 'Vietcombank',
-            'account_number' => '1234567890',
-            'account_name' => 'GAME MU ONLINE',
+            'bank_name' => config('payment.bank_name'),
+            'account_number' => config('payment.account_number'),
+            'account_name' => config('payment.account_name'),
+            'qr_image' => config('payment.qr_image'),
             'amount' => $amount,
             'content' => $transferContent,
-            'qr_string' => "VCB|1234567890|GAME MU ONLINE|{$amount}|{$transferContent}"
+            'qr_string' => "VCB|" . config('payment.account_number') . "|" . config('payment.account_name') . "|{$amount}|{$transferContent}"
         ];
     }
 
@@ -157,7 +159,7 @@ class UserPaymentRequest extends Model
     {
         return [
             'viettel' => 'Viettel',
-            'mobifone' => 'Mobifone', 
+            'mobifone' => 'Mobifone',
             'vinaphone' => 'Vinaphone',
             'vietnamobile' => 'Vietnamobile',
             'gmobile' => 'Gmobile',

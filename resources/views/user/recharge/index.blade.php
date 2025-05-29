@@ -244,7 +244,12 @@
             <div style="text-align: center;">
                 <h4 style="margin-bottom: 1rem; color: #374151;">Quét mã QR:</h4>
                 <div style="background: white; padding: 1rem; border-radius: 8px; display: inline-block;">
-                    <div id="qrcode" style="width: 200px; height: 200px;"></div>
+                    @if(session('qr_image_url'))
+                        <img src="{{ session('qr_image_url') }}" alt="QR Code" style="width: 200px; height: 200px;" />
+                    @else
+                        {{-- Static default QR from config/payment.php --}}
+                        <img src="{{ asset(config('payment.qr_image')) }}" alt="QR Code" style="width: 200px; height: 200px;" />
+                    @endif
                 </div>
                 <div style="margin-top: 1rem;">
                     <button onclick="copyBankInfo()" class="btn btn-outline">
@@ -340,12 +345,4 @@ Nội dung: {{ session('qr_data.content', '') }}`;
         alert('Đã sao chép thông tin chuyển khoản!');
     });
 }
-
-@if(session('qr_data'))
-// Generate QR Code
-const qrData = '{{ session("qr_data.qr_string") }}';
-// You would need to include a QR code library like qrcode.js
-// For now, just show a placeholder
-document.getElementById('qrcode').innerHTML = '<div style="background: #f3f4f6; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #6b7280;">QR Code<br>Placeholder</div>';
-@endif
 @endsection
