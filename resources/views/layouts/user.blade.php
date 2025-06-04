@@ -221,12 +221,14 @@
             color: #92400e;
         }
 
-        .status-completed {
-            background: #dbeafe;
-            color: #1e40af;
+        .status-completed,
+        .status-success {
+            background: #dcfce7;
+            color: #166534;
         }
 
-        .status-rejected {
+        .status-rejected,
+        .status-failed {
             background: #fee2e2;
             color: #991b1b;
         }

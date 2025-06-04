@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\Account;
 use App\Models\UserAccount;
 use App\Models\UserCoinBalance;
 
@@ -30,42 +31,63 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Find user by username or email
-        $user = UserAccount::where(function ($query) use ($request) {
-            $query->where('username', $request->username)
-                ->orWhere('email', $request->username);
-        })->where('status', 'active')->first();
+        // Find user by username or email in t_account table
+        $user = Account::where(function ($query) use ($request) {
+            $query->where('UserName', $request->username)
+                ->orWhere('Email', $request->username);
+        })->first();
 
         // Debug logging
         Log::info('Login attempt', [
             'username' => $request->username,
             'user_found' => $user ? true : false,
-            'user_id' => $user ? $user->id : null,
-            'password_check' => $user ? Hash::check($request->password, $user->password) : false
+            'user_id' => $user ? $user->ID : null,
+            'password_check' => $user ? (strtoupper(md5($request->password)) === $user->Password) : false,
+            'is_active' => $user ? $user->isActive() : false,
+            'status' => $user ? $user->Status : null
         ]);
 
-        if ($user && Hash::check($request->password, $user->password)) {
-            // Login successful
-            Session::put('user_account', [
-                'id' => $user->id,
-                'username' => $user->username,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'game_account_id' => $user->game_account_id,
-                'status' => $user->status,
-            ]);
-
-            // Update last login (optional)
-            $user->update([
-                'updated_at' => now()
-            ]);
-
-            return redirect('/user/dashboard')->with('success', 'Đăng nhập thành công!');
+        // Check if user exists
+        if (!$user) {
+            Log::info('User login failed - user not found', ['username' => $request->username]);
+            return back()->withErrors(['login' => 'Tài khoản không tồn tại.'])->withInput();
         }
 
-        return back()->withErrors([
-            'login' => 'Tên đăng nhập hoặc mật khẩu không đúng.',
-        ])->withInput();
+        // Check password
+        if (strtoupper(md5($request->password)) !== $user->Password) {
+            Log::info('User login failed - wrong password', ['username' => $request->username]);
+            return back()->withErrors(['login' => 'Mật khẩu không đúng.'])->withInput();
+        }
+
+        // Check if account is active
+        Log::info('Checking account status', [
+            'username' => $request->username,
+            'status_value' => $user->Status,
+            'status_type' => gettype($user->Status),
+            'is_active_result' => $user->isActive(),
+            'status_equals_1' => ($user->Status == 1),
+            'status_strict_equals_1' => ($user->Status === 1)
+        ]);
+
+        if (!$user->isActive()) {
+            Log::info('User login failed - account inactive', [
+                'username' => $request->username,
+                'status' => $user->Status
+            ]);
+            return back()->withErrors(['login' => 'Tài khoản đã bị khóa. Vui lòng liên hệ admin.'])->withInput();
+        }
+
+        // Login successful
+        Log::info('User login successful', ['user_id' => $user->ID, 'username' => $user->UserName]);
+
+        Session::put('user_account', [
+            'id' => $user->ID,
+            'username' => $user->UserName,
+            'email' => $user->Email,
+            'status' => 'active', // Always set to 'active' for middleware compatibility
+        ]);
+
+        return redirect('/user/dashboard')->with('success', 'Đăng nhập thành công!');
     }
 
     public function showRegister()
@@ -80,66 +102,56 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $request->validate([
-            'username' => 'required|string|min:3|max:50|unique:user_accounts,username',
-            'email' => 'required|email|max:100|unique:user_accounts,email',
-            'password' => 'required|string|min:6|confirmed',
+            'username' => 'required|string|min:4|max:20|alpha_num',
+            'email' => 'required|email|max:255',
+            'password' => 'required|string|min:4|max:32|confirmed',
             'phone' => 'nullable|string|max:20',
-            'game_username' => 'nullable|string|max:50', // Optional link to game account
         ]);
 
-        // Check if game account exists (if provided)
-        $gameAccountId = null;
-        if ($request->game_username) {
-            $gameAccount = DB::table('game_accounts')
-                ->where('username', $request->game_username)
-                ->first();
-
-            if (!$gameAccount) {
-                return back()->withErrors([
-                    'game_username' => 'Không tìm thấy tài khoản game với username này.'
-                ])->withInput();
-            }
-
-            // Check if game account is already linked
-            $existingLink = UserAccount::where('game_account_id', $gameAccount->id)->first();
-            if ($existingLink) {
-                return back()->withErrors([
-                    'game_username' => 'Tài khoản game này đã được liên kết với tài khoản khác.'
-                ])->withInput();
-            }
-
-            $gameAccountId = $gameAccount->id;
+        // Check if username already exists in t_account table
+        $existingAccount = Account::where('UserName', $request->username)->first();
+        if ($existingAccount) {
+            return back()->withErrors([
+                'username' => 'Tên đăng nhập đã tồn tại.',
+            ])->withInput();
         }
 
-        // Create user account
-        $user = UserAccount::create([
-            'username' => $request->username,
-            'email' => $request->email,
-            'password' => $request->password, // Will be hashed by mutator
-            'phone' => $request->phone,
-            'game_account_id' => $gameAccountId,
-            'status' => 'active',
-        ]);
+        // Check if email already exists
+        $existingEmail = Account::where('Email', $request->email)->first();
+        if ($existingEmail) {
+            return back()->withErrors([
+                'email' => 'Email đã được sử dụng.',
+            ])->withInput();
+        }
 
-        // Create initial coin balance
-        UserCoinBalance::create([
-            'user_id' => $user->id,
-            'web_coins' => 0,
-            'game_coins' => 0,
-            'total_recharged' => 0,
-        ]);
+        try {
+            // Create account in t_account table
+            $account = Account::create([
+                'UserName' => $request->username,
+                'Password' => strtoupper(md5($request->password)),
+                'Email' => $request->email,
+                'CreateTime' => now(),
+                'LastLoginTime' => now(),
+                'Status' => 1, // Active
+                'DeviceID' => '',
+                'Session' => '',
+            ]);
 
-        // Auto login after registration
-        Session::put('user_account', [
-            'id' => $user->id,
-            'username' => $user->username,
-            'email' => $user->email,
-            'phone' => $user->phone,
-            'game_account_id' => $user->game_account_id,
-            'status' => $user->status,
-        ]);
+            // Auto login after registration
+            Session::put('user_account', [
+                'id' => $account->ID,
+                'username' => $account->UserName,
+                'email' => $account->Email,
+                'status' => 'active', // Always set to 'active' for middleware compatibility
+            ]);
 
-        return redirect('/user/dashboard')->with('success', 'Đăng ký thành công! Chào mừng bạn đến với MU Game Portal.');
+            return redirect('/user/dashboard')->with('success', 'Đăng ký thành công! Chào mừng bạn đến với MU Game Portal.');
+        } catch (\Exception $e) {
+            Log::error('Registration failed: ' . $e->getMessage());
+            return back()->withErrors([
+                'register' => 'Có lỗi xảy ra trong quá trình đăng ký. Vui lòng thử lại.',
+            ])->withInput();
+        }
     }
 
     public function logout(Request $request)
@@ -156,8 +168,16 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $request->validate([
-            'email' => 'required|email|exists:user_accounts,email',
+            'email' => 'required|email',
         ]);
+
+        // Check if email exists in t_account table
+        $account = Account::where('Email', $request->email)->first();
+        if (!$account) {
+            return back()->withErrors([
+                'email' => 'Email không tồn tại trong hệ thống.',
+            ])->withInput();
+        }
 
         // TODO: Implement password reset functionality
         // For now, just show a message

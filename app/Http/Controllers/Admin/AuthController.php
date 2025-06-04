@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
@@ -28,13 +29,21 @@ class AuthController extends Controller
         ]);
 
         // Check admin user in database
-        $admin = DB::table('admin_users')
+        $admin = DB::table('t_admin_users')
             ->where('username', $request->username)
-            ->where('is_active', true)
+            ->where('is_active', 1)
             ->first();
+
+        Log::info('Admin login attempt', [
+            'username' => $request->username,
+            'admin_found' => $admin ? true : false,
+            'password_check' => $admin ? Hash::check($request->password, $admin->password) : false
+        ]);
 
         if ($admin && Hash::check($request->password, $admin->password)) {
             // Login successful
+            Log::info('Admin login successful', ['admin_id' => $admin->id, 'username' => $admin->username]);
+
             Session::put('admin_user', [
                 'id' => $admin->id,
                 'username' => $admin->username,
@@ -45,7 +54,7 @@ class AuthController extends Controller
             ]);
 
             // Update last login
-            DB::table('admin_users')
+            DB::table('t_admin_users')
                 ->where('id', $admin->id)
                 ->update([
                     'last_login_at' => now(),
@@ -55,6 +64,8 @@ class AuthController extends Controller
 
             return redirect('/admin/dashboard')->with('success', 'Đăng nhập thành công!');
         }
+
+        Log::info('Admin login failed', ['username' => $request->username]);
 
         return back()->withErrors([
             'login' => 'Tên đăng nhập hoặc mật khẩu không đúng.',
@@ -77,10 +88,10 @@ class AuthController extends Controller
 
         // Get dashboard stats
         $stats = [
-            'accounts' => DB::table('game_accounts')->count(),
-            'characters' => DB::table('t_roles')->count(),
-            'giftcodes' => DB::table('giftcodes')->count(),
-            'total_coins' => DB::table('recharge_logs')->sum('coins_added') ?? 0,
+            'accounts' => DB::table('t_account')->count(),
+            'characters' => 0, // Will implement later when we have character table
+            'giftcodes' => 0, // Will implement later when we have giftcode table
+            'total_coins' => 0, // Will implement later
         ];
 
         return view('dashboard', compact('admin', 'stats'));

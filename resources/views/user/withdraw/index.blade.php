@@ -4,25 +4,73 @@
 
 @section('content')
 <!-- Current Balance -->
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">
-            <i class="fas fa-wallet"></i>
-            Số dư hiện tại
-        </h3>
+<div class="grid grid-2">
+    <!-- Web Coins -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-wallet" style="color: #3b82f6;"></i>
+                Coin Website
+            </h3>
+        </div>
+        <div style="text-align: center;">
+            <div style="font-size: 2.5rem; font-weight: 700; color: #3b82f6; margin-bottom: 0.5rem;">
+                {{ number_format($webCoins->balance ?? 0) }}
+            </div>
+            <div style="color: #6b7280; font-size: 1rem;">
+                Coin khả dụng để rút
+            </div>
+            <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">
+                Tổng đã nạp: {{ number_format($webCoins->total_recharged ?? 0) }}đ
+            </div>
+        </div>
     </div>
-    <div style="text-align: center;">
-        <div style="font-size: 3rem; font-weight: 700; color: #f59e0b; margin-bottom: 0.5rem;">
-            {{ number_format($userAccount->getCurrentCoins()) }}
+
+    <!-- Game Coins -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-gamepad" style="color: #10b981;"></i>
+                Coin Game ({{ $user->getGameUserId() }})
+            </h3>
         </div>
-        <div style="color: #6b7280; font-size: 1rem;">
-            Coin khả dụng để rút
-        </div>
-        <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">
-            Tổng đã nạp: {{ number_format($userAccount->getTotalRecharged()) }}đ
+        <div style="text-align: center;">
+            <div style="font-size: 2.5rem; font-weight: 700; color: #10b981; margin-bottom: 0.5rem;">
+                {{ number_format($gameMoney->money ?? 0) }}
+            </div>
+            <div style="color: #6b7280; font-size: 1rem;">
+                Coin trong game
+            </div>
+            <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">
+                Nhân vật: {{ $gameCharacters->count() }} characters
+            </div>
         </div>
     </div>
 </div>
+
+<!-- Game Characters -->
+@if($gameCharacters->count() > 0)
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            <i class="fas fa-users" style="color: #8b5cf6;"></i>
+            Nhân vật trong game
+        </h3>
+    </div>
+    <div class="grid grid-4">
+        @foreach($gameCharacters as $character)
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; text-align: center;">
+                <div style="font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                    {{ $character->rname }}
+                </div>
+                <div style="color: #6b7280; font-size: 0.875rem;">
+                    ID: {{ $character->rid }}
+                </div>
+            </div>
+        @endforeach
+    </div>
+</div>
+@endif
 
 <!-- Withdraw Limits Info -->
 <div class="card">
@@ -65,7 +113,7 @@
                 <i class="fas fa-info-circle"></i> Hướng dẫn rút coin
             </div>
             <ul style="color: #6b7280; font-size: 0.875rem; margin: 0; padding-left: 1rem;">
-                <li>Nhập chính xác tên tài khoản game nhận coin</li>
+                <li>Chọn nhân vật để nhận coin trong game</li>
                 <li>Coin sẽ được chuyển ngay lập tức vào tài khoản game</li>
                 <li>Giới hạn rút: 1,000 - 1,000,000 coin mỗi lần</li>
                 <li>Giới hạn hàng ngày: 500,000 coin</li>
@@ -76,45 +124,47 @@
 
     <form method="POST" action="{{ route('user.withdraw.post') }}" id="withdrawForm">
         @csrf
-        
+
         <div class="grid grid-2">
             <div class="form-group">
-                <label for="game_username" class="form-label">Tên tài khoản game</label>
-                <input 
-                    type="text" 
-                    name="game_username" 
-                    id="game_username" 
-                    class="form-input" 
-                    value="{{ old('game_username') }}"
-                    placeholder="Nhập tên tài khoản game nhận coin"
+                <label for="character_id" class="form-label">Chọn nhân vật nhận coin</label>
+                <select
+                    name="character_id"
+                    id="character_id"
+                    class="form-select"
                     required
-                    minlength="3"
-                    maxlength="50"
                 >
+                    <option value="">-- Chọn nhân vật --</option>
+                    @foreach($gameCharacters as $character)
+                        <option value="{{ $character->rid }}" {{ old('character_id') == $character->rid ? 'selected' : '' }}>
+                            {{ $character->rname }} (ID: {{ $character->rid }})
+                        </option>
+                    @endforeach
+                </select>
                 <div style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
-                    Tài khoản game phải tồn tại và đang hoạt động
+                    Coin sẽ được chuyển vào nhân vật đã chọn
                 </div>
-                @error('game_username')
+                @error('character_id')
                     <div style="color: #ef4444; font-size: 0.75rem; margin-top: 0.25rem;">{{ $message }}</div>
                 @enderror
             </div>
 
             <div class="form-group">
                 <label for="amount" class="form-label">Số coin muốn rút</label>
-                <input 
-                    type="number" 
-                    name="amount" 
-                    id="amount" 
-                    class="form-input" 
+                <input
+                    type="number"
+                    name="amount"
+                    id="amount"
+                    class="form-input"
                     value="{{ old('amount') }}"
                     placeholder="Nhập số coin"
                     required
                     min="1000"
-                    max="{{ min($userAccount->getCurrentCoins(), $stats['remaining_today'], 1000000) }}"
+                    max="{{ min($webCoins->balance ?? 0, $stats['remaining_today'], 1000000) }}"
                     step="1000"
                 >
                 <div style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
-                    Tối thiểu: 1,000 - Tối đa: {{ number_format(min($userAccount->getCurrentCoins(), $stats['remaining_today'], 1000000)) }}
+                    Tối thiểu: 1,000 - Tối đa: {{ number_format(min($webCoins->balance ?? 0, $stats['remaining_today'], 1000000)) }}
                 </div>
                 @error('amount')
                     <div style="color: #ef4444; font-size: 0.75rem; margin-top: 0.25rem;">{{ $message }}</div>
@@ -127,9 +177,9 @@
                 <i class="fas fa-exclamation-triangle"></i> Lưu ý quan trọng
             </div>
             <ul style="color: #92400e; font-size: 0.875rem; margin: 0; padding-left: 1rem;">
-                <li>Kiểm tra kỹ tên tài khoản game trước khi rút</li>
+                <li>Kiểm tra kỹ nhân vật được chọn trước khi rút</li>
                 <li>Coin sẽ được chuyển ngay lập tức và không thể hoàn tác</li>
-                <li>Chỉ rút coin cho tài khoản game của chính bạn</li>
+                <li>Chỉ rút coin vào nhân vật của chính bạn</li>
                 <li>Liên hệ admin nếu có vấn đề với giao dịch</li>
             </ul>
         </div>
@@ -155,7 +205,7 @@
                 <thead>
                     <tr style="border-bottom: 1px solid #e5e7eb;">
                         <th style="text-align: left; padding: 0.75rem; font-weight: 500; color: #374151;">Mã GD</th>
-                        <th style="text-align: left; padding: 0.75rem; font-weight: 500; color: #374151;">Tài khoản game</th>
+                        <th style="text-align: left; padding: 0.75rem; font-weight: 500; color: #374151;">Nhân vật</th>
                         <th style="text-align: left; padding: 0.75rem; font-weight: 500; color: #374151;">Số coin</th>
                         <th style="text-align: left; padding: 0.75rem; font-weight: 500; color: #374151;">Trạng thái</th>
                         <th style="text-align: left; padding: 0.75rem; font-weight: 500; color: #374151;">Thời gian</th>
@@ -163,17 +213,21 @@
                 </thead>
                 <tbody>
                     @foreach($recentWithdraws as $withdraw)
+                        @php
+                            $details = json_decode($withdraw->description, true);
+                            $characterName = $details['character_name'] ?? 'N/A';
+                        @endphp
                         <tr style="border-bottom: 1px solid #f3f4f6;">
                             <td style="padding: 0.75rem; font-family: monospace;">#{{ $withdraw->id }}</td>
-                            <td style="padding: 0.75rem; font-weight: 500;">{{ $withdraw->game_username }}</td>
+                            <td style="padding: 0.75rem; font-weight: 500;">{{ $characterName }}</td>
                             <td style="padding: 0.75rem; color: #ef4444; font-weight: 500;">-{{ number_format($withdraw->amount) }}</td>
                             <td style="padding: 0.75rem;">
-                                <span class="status-badge {{ $withdraw->getStatusBadgeClass() }}">
-                                    {{ $withdraw->getStatusIcon() }} {{ $withdraw->getStatusText() }}
+                                <span class="status-badge status-success">
+                                    ✅ Thành công
                                 </span>
                             </td>
                             <td style="padding: 0.75rem; color: #6b7280; font-size: 0.875rem;">
-                                {{ $withdraw->created_at->format('d/m/Y H:i') }}
+                                {{ \Carbon\Carbon::parse($withdraw->created_at)->format('d/m/Y H:i') }}
                             </td>
                         </tr>
                     @endforeach
@@ -230,37 +284,38 @@
 // Form validation
 document.getElementById('withdrawForm').addEventListener('submit', function(e) {
     const amount = parseInt(document.getElementById('amount').value);
-    const gameUsername = document.getElementById('game_username').value.trim();
-    
-    if (!gameUsername) {
-        alert('Vui lòng nhập tên tài khoản game!');
+    const characterId = document.getElementById('character_id').value;
+    const characterName = document.getElementById('character_id').selectedOptions[0]?.text || '';
+
+    if (!characterId) {
+        alert('Vui lòng chọn nhân vật nhận coin!');
         e.preventDefault();
         return;
     }
-    
+
     if (amount < 1000) {
         alert('Số coin tối thiểu là 1,000!');
         e.preventDefault();
         return;
     }
-    
-    if (amount > {{ $userAccount->getCurrentCoins() }}) {
+
+    if (amount > {{ $webCoins->balance ?? 0 }}) {
         alert('Không đủ coin để rút!');
         e.preventDefault();
         return;
     }
-    
+
     if (amount > {{ $stats['remaining_today'] }}) {
         alert('Vượt quá giới hạn rút coin hàng ngày!');
         e.preventDefault();
         return;
     }
-    
-    if (!confirm(`Bạn có chắc chắn muốn rút ${new Intl.NumberFormat().format(amount)} coin sang tài khoản game "${gameUsername}"?\n\nHành động này không thể hoàn tác!`)) {
+
+    if (!confirm(`Bạn có chắc chắn muốn rút ${new Intl.NumberFormat().format(amount)} coin vào nhân vật "${characterName}"?\n\nHành động này không thể hoàn tác!`)) {
         e.preventDefault();
         return;
     }
-    
+
     // Disable button to prevent double submission
     const btn = document.getElementById('withdrawBtn');
     btn.disabled = true;

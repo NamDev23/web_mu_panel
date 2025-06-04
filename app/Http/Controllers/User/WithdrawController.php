@@ -6,29 +6,54 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\DB;
-use App\Models\UserAccount;
-use App\Models\GameAccount;
-use App\Models\UserTransactionLog;
-use App\Models\WithdrawRequest;
+use App\Models\Account;
 
 class WithdrawController extends Controller
 {
     public function index()
     {
-        $user = Session::get('user_account');
-        $userAccount = UserAccount::with(['coinBalance', 'gameAccount'])->find($user['id']);
+        $userSession = Session::get('user_account');
+        $user = Account::find($userSession['id']);
 
-        // Get recent withdraw requests
-        $recentWithdraws = WithdrawRequest::where('user_id', $user['id'])
+        if (!$user) {
+            return redirect('/user/login')->withErrors(['login' => 'Tài khoản không tồn tại.']);
+        }
+
+        // Get user's coin balances
+        $webCoins = $user->getWebCoins();
+        if (!$webCoins) {
+            // Create initial coin balance record
+            DB::table('t_web_coins')->insert([
+                'account_id' => $user->ID,
+                'balance' => 0,
+                'total_recharged' => 0,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+            $webCoins = (object) ['balance' => 0, 'total_recharged' => 0];
+        }
+
+        // Get game coins and characters
+        $gameMoney = $user->getGameMoney();
+        $gameCharacters = $user->getGameCharacters();
+
+        // Get recent withdraw transactions
+        $recentWithdraws = DB::table('t_coin_transactions')
+            ->where('account_id', $user->ID)
+            ->where('type', 'spend')
+            ->where('reference_type', 'withdraw')
             ->orderBy('created_at', 'desc')
             ->limit(10)
             ->get();
 
         // Get withdraw statistics
-        $stats = $this->getWithdrawStats($user['id']);
+        $stats = $this->getWithdrawStats($user->ID);
 
         return view('user.withdraw.index', compact(
-            'userAccount',
+            'user',
+            'webCoins',
+            'gameMoney',
+            'gameCharacters',
             'recentWithdraws',
             'stats'
         ));
@@ -38,132 +63,119 @@ class WithdrawController extends Controller
     {
         $request->validate([
             'amount' => 'required|integer|min:1000|max:1000000',
-            'game_username' => 'required|string|min:3|max:50',
+            'character_id' => 'required|integer',
         ], [
             'amount.required' => 'Vui lòng nhập số coin muốn rút',
             'amount.integer' => 'Số coin phải là số nguyên',
             'amount.min' => 'Số coin tối thiểu là 1,000',
             'amount.max' => 'Số coin tối đa là 1,000,000',
-            'game_username.required' => 'Vui lòng nhập tên tài khoản game',
-            'game_username.min' => 'Tên tài khoản game phải có ít nhất 3 ký tự',
-            'game_username.max' => 'Tên tài khoản game không được quá 50 ký tự',
+            'character_id.required' => 'Vui lòng chọn nhân vật',
+            'character_id.integer' => 'ID nhân vật không hợp lệ',
         ]);
 
-        $user = Session::get('user_account');
-        $userAccount = UserAccount::with('coinBalance')->find($user['id']);
-
+        $userSession = Session::get('user_account');
+        $user = Account::find($userSession['id']);
         $amount = $request->amount;
-        $gameUsername = $request->game_username;
+        $characterId = $request->character_id;
 
-        // Check if user has enough coins
-        if (!$userAccount->hasEnoughCoins($amount)) {
-            return back()->withErrors(['error' => "Không đủ coin. Bạn có {$userAccount->getCurrentCoins()} coin."]);
+        // Get web coins balance
+        $webCoins = $user->getWebCoins();
+        if (!$webCoins || $webCoins->balance < $amount) {
+            return back()->withErrors(['error' => "Không đủ coin. Bạn có " . number_format($webCoins->balance ?? 0) . " coin."]);
         }
 
-        // Check if game account exists
-        $gameAccount = GameAccount::where('username', $gameUsername)->first();
-        if (!$gameAccount) {
-            return back()->withErrors(['error' => 'Không tìm thấy tài khoản game với tên này.']);
+        // Check if character belongs to user
+        $character = $user->getGameCharacters()->where('rid', $characterId)->first();
+        if (!$character) {
+            return back()->withErrors(['error' => 'Nhân vật không tồn tại hoặc không thuộc về bạn.']);
         }
 
-        // Check if game account is active
-        if (!$gameAccount->isActive()) {
-            return back()->withErrors(['error' => 'Tài khoản game không hoạt động hoặc bị khóa.']);
-        }
-
-        // Check daily withdraw limit (example: 500,000 coins per day)
+        // Check daily withdraw limit (500,000 coins per day)
         $dailyLimit = 500000;
-        $todayWithdraws = WithdrawRequest::where('user_id', $user['id'])
-            ->where('status', 'completed')
+        $todayWithdraws = DB::table('t_coin_transactions')
+            ->where('account_id', $user->ID)
+            ->where('type', 'spend')
+            ->where('reference_type', 'withdraw')
             ->whereDate('created_at', today())
             ->sum('amount');
 
         if (($todayWithdraws + $amount) > $dailyLimit) {
-            return back()->withErrors(['error' => "Vượt quá giới hạn rút coin hàng ngày ({$dailyLimit} coin). Hôm nay bạn đã rút {$todayWithdraws} coin."]);
+            return back()->withErrors(['error' => "Vượt quá giới hạn rút coin hàng ngày (" . number_format($dailyLimit) . " coin). Hôm nay bạn đã rút " . number_format($todayWithdraws) . " coin."]);
         }
 
         try {
             DB::beginTransaction();
 
-            // Create withdraw request
-            $withdrawRequest = WithdrawRequest::create([
-                'user_id' => $user['id'],
-                'game_account_id' => $gameAccount->id,
-                'game_username' => $gameUsername,
-                'amount' => $amount,
-                'status' => 'processing',
-                'web_coins_before' => $userAccount->getCurrentCoins(),
-                'game_coins_before' => $gameAccount->current_balance,
-                'ip_address' => request()->ip(),
-                'user_agent' => request()->userAgent()
-            ]);
+            // Get current balances
+            $webBalanceBefore = $webCoins->balance;
+            $gameMoney = $user->getGameMoney();
+            $gameBalanceBefore = $gameMoney ? $gameMoney->money : 0;
 
             // Deduct coins from web balance
-            $userAccount->deductCoins(
-                $amount,
-                "Rút coin sang tài khoản game: {$gameUsername}",
-                $withdrawRequest
-            );
+            DB::table('t_web_coins')
+                ->where('account_id', $user->ID)
+                ->decrement('balance', $amount);
 
             // Add coins to game account
-            $gameAccount->addCoins(
-                $amount,
-                "Nhận coin từ web account: {$userAccount->username}"
-            );
+            DB::connection('game_mysql')
+                ->table('t_money')
+                ->where('userid', $user->getGameUserId())
+                ->increment('money', $amount);
 
-            // Update withdraw request with after balances
-            $withdrawRequest->update([
-                'web_coins_after' => $userAccount->getCurrentCoins(),
-                'game_coins_after' => $gameAccount->current_balance,
-                'status' => 'completed',
-                'processed_at' => now()
-            ]);
+            // Get updated balances
+            $webBalanceAfter = $webBalanceBefore - $amount;
+            $gameBalanceAfter = $gameBalanceBefore + $amount;
 
-            // Log transfer transaction
-            UserTransactionLog::create([
-                'user_id' => $user['id'],
-                'type' => 'transfer_to_game',
-                'description' => "Rút {$amount} coin sang tài khoản game: {$gameUsername}",
-                'coin_amount' => -$amount,
-                'coin_before' => $withdrawRequest->web_coins_before,
-                'coin_after' => $withdrawRequest->web_coins_after,
-                'metadata' => [
-                    'withdraw_request_id' => $withdrawRequest->id,
-                    'game_username' => $gameUsername,
-                    'game_account_id' => $gameAccount->id,
-                    'game_coins_before' => $withdrawRequest->game_coins_before,
-                    'game_coins_after' => $withdrawRequest->game_coins_after
-                ],
-                'reference_type' => WithdrawRequest::class,
-                'reference_id' => $withdrawRequest->id,
-                'ip_address' => request()->ip(),
-                'user_agent' => request()->userAgent()
+            // Create transaction record
+            $transactionId = DB::table('t_coin_transactions')->insertGetId([
+                'account_id' => $user->ID,
+                'type' => 'spend',
+                'amount' => $amount,
+                'balance_before' => $webBalanceBefore,
+                'balance_after' => $webBalanceAfter,
+                'description' => json_encode([
+                    'type' => 'withdraw_to_game',
+                    'character_id' => $characterId,
+                    'character_name' => $character->rname,
+                    'game_userid' => $user->getGameUserId(),
+                    'web_balance_before' => $webBalanceBefore,
+                    'web_balance_after' => $webBalanceAfter,
+                    'game_balance_before' => $gameBalanceBefore,
+                    'game_balance_after' => $gameBalanceAfter,
+                    'status' => 'completed'
+                ]),
+                'reference_type' => 'withdraw',
+                'reference_id' => $characterId,
+                'processed_by' => $user->ID,
+                'created_at' => now(),
+                'updated_at' => now()
             ]);
 
             DB::commit();
 
-            return back()->with('success', 
-                "Rút {$amount} coin thành công! " .
-                "Coin đã được chuyển vào tài khoản game '{$gameUsername}'. " .
-                "Số dư web hiện tại: " . number_format($userAccount->getCurrentCoins()) . " coin."
+            return back()->with(
+                'success',
+                "Rút " . number_format($amount) . " coin thành công! " .
+                    "Coin đã được chuyển vào nhân vật '{$character->rname}'. " .
+                    "Số dư web hiện tại: " . number_format($webBalanceAfter) . " coin."
             );
-
         } catch (\Exception $e) {
             DB::rollback();
             return back()->withErrors(['error' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
         }
     }
 
+    // TODO: Implement history and show methods with new database structure
+    /*
     public function history(Request $request)
     {
-        $user = Session::get('user_account');
-        
-        $query = WithdrawRequest::where('user_id', $user['id']);
+        $userSession = Session::get('user_account');
+        $user = Account::find($userSession['id']);
 
-        // Filter by status
-        if ($request->has('status') && !empty($request->status)) {
-            $query->where('status', $request->status);
-        }
+        $query = DB::table('t_coin_transactions')
+            ->where('account_id', $user->ID)
+            ->where('type', 'spend')
+            ->where('reference_type', 'withdraw');
 
         // Filter by date range
         if ($request->has('date_from') && !empty($request->date_from)) {
@@ -181,32 +193,54 @@ class WithdrawController extends Controller
 
     public function show($id)
     {
-        $user = Session::get('user_account');
-        
-        $withdraw = WithdrawRequest::where('user_id', $user['id'])
+        $userSession = Session::get('user_account');
+        $user = Account::find($userSession['id']);
+
+        $withdraw = DB::table('t_coin_transactions')
+            ->where('account_id', $user->ID)
             ->where('id', $id)
-            ->firstOrFail();
+            ->where('type', 'spend')
+            ->where('reference_type', 'withdraw')
+            ->first();
+
+        if (!$withdraw) {
+            abort(404);
+        }
 
         return view('user.withdraw.show', compact('withdraw'));
     }
+    */
 
     private function getWithdrawStats($userId)
     {
+        $totalWithdraws = DB::table('t_coin_transactions')
+            ->where('account_id', $userId)
+            ->where('type', 'spend')
+            ->where('reference_type', 'withdraw')
+            ->count();
+
+        $totalAmount = DB::table('t_coin_transactions')
+            ->where('account_id', $userId)
+            ->where('type', 'spend')
+            ->where('reference_type', 'withdraw')
+            ->sum('amount');
+
+        $todayAmount = DB::table('t_coin_transactions')
+            ->where('account_id', $userId)
+            ->where('type', 'spend')
+            ->where('reference_type', 'withdraw')
+            ->whereDate('created_at', today())
+            ->sum('amount');
+
+        $dailyLimit = 500000;
+
         return [
-            'total_withdraws' => WithdrawRequest::where('user_id', $userId)->count(),
-            'completed_withdraws' => WithdrawRequest::where('user_id', $userId)
-                ->where('status', 'completed')->count(),
-            'total_amount' => WithdrawRequest::where('user_id', $userId)
-                ->where('status', 'completed')->sum('amount'),
-            'today_amount' => WithdrawRequest::where('user_id', $userId)
-                ->where('status', 'completed')
-                ->whereDate('created_at', today())
-                ->sum('amount'),
-            'daily_limit' => 500000,
-            'remaining_today' => max(0, 500000 - WithdrawRequest::where('user_id', $userId)
-                ->where('status', 'completed')
-                ->whereDate('created_at', today())
-                ->sum('amount'))
+            'total_withdraws' => $totalWithdraws,
+            'completed_withdraws' => $totalWithdraws, // All withdraws are completed immediately
+            'total_amount' => $totalAmount,
+            'today_amount' => $todayAmount,
+            'daily_limit' => $dailyLimit,
+            'remaining_today' => max(0, $dailyLimit - $todayAmount)
         ];
     }
 }

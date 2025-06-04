@@ -18,27 +18,21 @@ class AccountController extends Controller
         $searchType = $request->get('search_type', 'username');
 
         // Query real database
-        $query = DB::table('game_accounts');
+        $query = DB::table('t_account');
 
         if ($search) {
             switch ($searchType) {
                 case 'email':
-                    $query->where('email', 'like', "%{$search}%");
-                    break;
-                case 'phone':
-                    $query->where('phone', 'like', "%{$search}%");
-                    break;
-                case 'full_name':
-                    $query->where('full_name', 'like', "%{$search}%");
+                    $query->where('Email', 'like', "%{$search}%");
                     break;
                 case 'username':
                 default:
-                    $query->where('username', 'like', "%{$search}%");
+                    $query->where('UserName', 'like', "%{$search}%");
                     break;
             }
         }
 
-        $accounts = $query->orderBy('created_at', 'desc')->paginate(20);
+        $accounts = $query->orderBy('CreateTime', 'desc')->paginate(20);
 
         return view('admin.accounts.index', compact('admin', 'accounts', 'search', 'searchType'));
     }
@@ -46,7 +40,7 @@ class AccountController extends Controller
     public function show($id)
     {
         $admin = Session::get('admin_user');
-        $account = DB::table('game_accounts')->where('id', $id)->first();
+        $account = DB::table('t_account')->where('ID', $id)->first();
 
         if (!$account) {
             return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
@@ -54,7 +48,7 @@ class AccountController extends Controller
 
         // Get recent login logs from ip_logs table
         $recentLogins = DB::table('ip_logs')
-            ->where('username', $account->username)
+            ->where('username', $account->UserName)
             ->orderBy('created_at', 'desc')
             ->limit(5)
             ->get();
@@ -68,20 +62,17 @@ class AccountController extends Controller
         $reason = $request->input('reason', 'Vi phạm quy định');
 
         // Get account info before ban
-        $account = DB::table('game_accounts')->where('id', $id)->first();
+        $account = DB::table('t_account')->where('ID', $id)->first();
         if (!$account) {
             return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
         }
 
         // Update account status
-        DB::table('game_accounts')
-            ->where('id', $id)
+        DB::table('t_account')
+            ->where('ID', $id)
             ->update([
-                'status' => 'banned',
-                'ban_reason' => $reason,
-                'banned_at' => now(),
-                'banned_by' => $admin['id'],
-                'updated_at' => now()
+                'Status' => 0, // 0 = banned
+                'LastLoginTime' => now()
             ]);
 
         // Log admin action
@@ -106,20 +97,17 @@ class AccountController extends Controller
         $admin = Session::get('admin_user');
 
         // Get account info before unban
-        $account = DB::table('game_accounts')->where('id', $id)->first();
+        $account = DB::table('t_account')->where('ID', $id)->first();
         if (!$account) {
             return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
         }
 
         // Update account status
-        DB::table('game_accounts')
-            ->where('id', $id)
+        DB::table('t_account')
+            ->where('ID', $id)
             ->update([
-                'status' => 'active',
-                'ban_reason' => null,
-                'banned_at' => null,
-                'banned_by' => null,
-                'updated_at' => now()
+                'Status' => 1, // 1 = active
+                'LastLoginTime' => now()
             ]);
 
         // Log admin action
@@ -198,8 +186,17 @@ class AccountController extends Controller
             ]);
 
         // Log admin action
-        $this->logAdminAction($admin, 'edit_account', 'account', $id, $account->username,
-            $oldData, $newData, 'Cập nhật thông tin tài khoản', $request->ip());
+        $this->logAdminAction(
+            $admin,
+            'edit_account',
+            'account',
+            $id,
+            $account->username,
+            $oldData,
+            $newData,
+            'Cập nhật thông tin tài khoản',
+            $request->ip()
+        );
 
         return redirect()->route('admin.accounts.show', $id)
             ->with('success', "Đã cập nhật thông tin tài khoản {$account->username} thành công.");
