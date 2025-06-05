@@ -15,13 +15,13 @@
         </div>
         <div style="text-align: center;">
             <div style="font-size: 2.5rem; font-weight: 700; color: #3b82f6; margin-bottom: 0.5rem;">
-                {{ number_format($webCoins->balance ?? 0) }}
+                {{ number_format($userCoins->coins ?? 0) }}
             </div>
             <div style="color: #6b7280; font-size: 1rem;">
                 Coin khả dụng để rút
             </div>
             <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">
-                Tổng đã nạp: {{ number_format($webCoins->total_recharged ?? 0) }}đ
+                Tổng đã nạp: {{ number_format($userCoins->total_recharged ?? 0) }}đ
             </div>
         </div>
     </div>
@@ -160,11 +160,11 @@
                     placeholder="Nhập số coin"
                     required
                     min="1000"
-                    max="{{ min($webCoins->balance ?? 0, $stats['remaining_today'], 1000000) }}"
+                    max="{{ min($userCoins->coins ?? 0, $stats['remaining_today'], 1000000) }}"
                     step="1000"
                 >
                 <div style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
-                    Tối thiểu: 1,000 - Tối đa: {{ number_format(min($webCoins->balance ?? 0, $stats['remaining_today'], 1000000)) }}
+                    Tối thiểu: 1,000 - Tối đa: {{ number_format(min($userCoins->coins ?? 0, $stats['remaining_today'], 1000000)) }}
                 </div>
                 @error('amount')
                     <div style="color: #ef4444; font-size: 0.75rem; margin-top: 0.25rem;">{{ $message }}</div>
@@ -214,13 +214,14 @@
                 <tbody>
                     @foreach($recentWithdraws as $withdraw)
                         @php
-                            $details = json_decode($withdraw->description, true);
-                            $characterName = $details['character_name'] ?? 'N/A';
+                            // Use data from coin_spend_logs table
+                            $itemData = json_decode($withdraw->item_data, true);
+                            $characterName = $itemData['character_name'] ?? 'N/A';
                         @endphp
                         <tr style="border-bottom: 1px solid #f3f4f6;">
                             <td style="padding: 0.75rem; font-family: monospace;">#{{ $withdraw->id }}</td>
                             <td style="padding: 0.75rem; font-weight: 500;">{{ $characterName }}</td>
-                            <td style="padding: 0.75rem; color: #ef4444; font-weight: 500;">-{{ number_format($withdraw->amount) }}</td>
+                            <td style="padding: 0.75rem; color: #ef4444; font-weight: 500;">-{{ number_format($withdraw->coins_spent) }}</td>
                             <td style="padding: 0.75rem;">
                                 <span class="status-badge status-success">
                                     ✅ Thành công
@@ -299,7 +300,7 @@ document.getElementById('withdrawForm').addEventListener('submit', function(e) {
         return;
     }
 
-    if (amount > {{ $webCoins->balance ?? 0 }}) {
+    if (amount > {{ $userCoins->coins ?? 0 }}) {
         alert('Không đủ coin để rút!');
         e.preventDefault();
         return;

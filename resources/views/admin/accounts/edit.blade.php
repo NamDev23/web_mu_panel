@@ -162,15 +162,11 @@
 @endsection
 
 @section('content')
-</div>
-
-    <!-- Main Content -->
-    <div class="container">
         <!-- Breadcrumb -->
         <div class="breadcrumb">
-            <a href="/admin/dashboard">Dashboard</a> / 
-            <a href="/admin/accounts">Quản lý tài khoản</a> / 
-            <a href="/admin/accounts/{{ $account->id }}">{{ $account->username }}</a> / 
+            <a href="/admin/dashboard">Dashboard</a> /
+            <a href="/admin/accounts">Quản lý tài khoản</a> /
+            <a href="/admin/accounts/{{ $account->ID }}">{{ $account->UserName }}</a> /
             Chỉnh sửa
         </div>
 
@@ -187,96 +183,95 @@
         <div class="content-card">
             <div class="form-header">
                 <h1>✏️ Chỉnh sửa tài khoản</h1>
-                <p>Cập nhật thông tin tài khoản: <strong>{{ $account->username }}</strong></p>
+                <p>Cập nhật thông tin tài khoản: <strong>{{ $account->UserName }}</strong></p>
             </div>
 
             <!-- Account Status Info -->
             <div class="status-info">
                 <span>Trạng thái hiện tại:</span>
-                <span class="status-badge {{ $account->status == 'active' ? 'status-active' : 'status-banned' }}">
-                    {{ $account->status == 'active' ? 'Hoạt động' : 'Bị khóa' }}
+                <span class="status-badge {{ $account->Status == 1 ? 'status-active' : 'status-banned' }}">
+                    {{ $account->Status == 1 ? 'Hoạt động' : 'Bị khóa' }}
                 </span>
-                <span class="vip-badge">VIP {{ $account->vip_level }}</span>
+                <span class="vip-badge">VIP 0</span>
             </div>
 
             <div class="info-note">
-                ℹ️ <strong>Lưu ý:</strong> Việc thay đổi thông tin tài khoản sẽ được ghi lại trong log hệ thống. 
+                ℹ️ <strong>Lưu ý:</strong> Việc thay đổi thông tin tài khoản sẽ được ghi lại trong log hệ thống.
                 Chỉ thay đổi những thông tin cần thiết và đảm bảo tính chính xác.
             </div>
 
-            <form action="{{ route('admin.accounts.update', $account->id) }}" method="POST">
+            <form action="{{ route('admin.accounts.update', $account->ID) }}" method="POST">
                 @csrf
-                
+
                 <div class="form-grid">
                     <!-- Username (readonly) -->
                     <div class="form-group">
                         <label>Tên đăng nhập</label>
-                        <input type="text" class="form-control" value="{{ $account->username }}" readonly>
+                        <input type="text" class="form-control" value="{{ $account->UserName }}" readonly>
                     </div>
 
                     <!-- Email -->
                     <div class="form-group">
-                        <label>Email *</label>
-                        <input type="email" name="email" class="form-control" value="{{ old('email', $account->email) }}" required>
+                        <label>Email</label>
+                        <input type="email" name="email" class="form-control" value="{{ old('email', $account->Email) }}">
+                        <small style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Có thể chỉnh sửa email tài khoản</small>
                     </div>
 
-                    <!-- Phone -->
+                    <!-- Status -->
                     <div class="form-group">
-                        <label>Số điện thoại</label>
-                        <input type="text" name="phone" class="form-control" value="{{ old('phone', $account->phone) }}" placeholder="Nhập số điện thoại">
-                    </div>
-
-                    <!-- Full Name -->
-                    <div class="form-group">
-                        <label>Họ và tên</label>
-                        <input type="text" name="full_name" class="form-control" value="{{ old('full_name', $account->full_name) }}" placeholder="Nhập họ và tên">
-                    </div>
-
-                    <!-- VIP Level -->
-                    <div class="form-group">
-                        <label>Cấp VIP *</label>
-                        <select name="vip_level" class="form-control" required>
-                            @for($i = 0; $i <= 10; $i++)
-                                <option value="{{ $i }}" {{ old('vip_level', $account->vip_level) == $i ? 'selected' : '' }}>
-                                    VIP {{ $i }}
-                                </option>
-                            @endfor
+                        <label>Trạng thái tài khoản *</label>
+                        <select name="status" class="form-control" required>
+                            <option value="1" {{ old('status', $account->Status) == 1 ? 'selected' : '' }}>Hoạt động</option>
+                            <option value="0" {{ old('status', $account->Status) == 0 ? 'selected' : '' }}>Bị khóa</option>
                         </select>
                     </div>
 
-                    <!-- Current Balance -->
+                    <!-- Password Reset -->
                     <div class="form-group">
-                        <label>Số dư hiện tại *</label>
-                        <input type="number" name="current_balance" class="form-control" value="{{ old('current_balance', $account->current_balance) }}" min="0" step="0.01" required>
+                        <label>Mật khẩu mới</label>
+                        <input type="password" name="password" class="form-control" placeholder="Để trống nếu không muốn thay đổi">
+                        <small style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Tối thiểu 6 ký tự nếu muốn đổi mật khẩu</small>
                     </div>
 
-                    <!-- Total Recharge (readonly) -->
+                    <!-- Password Confirmation -->
                     <div class="form-group">
-                        <label>Tổng nạp (chỉ đọc)</label>
-                        <input type="text" class="form-control" value="{{ number_format($account->total_recharge) }}đ" readonly>
+                        <label>Xác nhận mật khẩu mới</label>
+                        <input type="password" name="password_confirmation" class="form-control" placeholder="Nhập lại mật khẩu mới">
+                    </div>
+
+                    <!-- Game User ID (readonly) -->
+                    <div class="form-group">
+                        <label>Game User ID (chỉ đọc)</label>
+                        <input type="text" class="form-control" value="ZT{{ str_pad($account->ID, 4, '0', STR_PAD_LEFT) }}" readonly>
+                    </div>
+
+                    <!-- Total Money (readonly) -->
+                    <div class="form-group">
+                        <label>Tổng xu game (chỉ đọc)</label>
+                        <input type="text" class="form-control" value="{{ number_format($account->total_money ?? 0) }} YB" readonly>
                     </div>
 
                     <!-- Characters Count (readonly) -->
                     <div class="form-group">
                         <label>Số nhân vật (chỉ đọc)</label>
-                        <input type="text" class="form-control" value="{{ $account->characters_count }} nhân vật" readonly>
+                        <input type="text" class="form-control" value="{{ $account->characters_count ?? 0 }} nhân vật" readonly>
                     </div>
 
                     <!-- Registration Date (readonly) -->
                     <div class="form-group">
                         <label>Ngày đăng ký (chỉ đọc)</label>
-                        <input type="text" class="form-control" value="{{ date('d/m/Y H:i', strtotime($account->created_at)) }}" readonly>
+                        <input type="text" class="form-control" value="{{ $account->CreateTime ? date('d/m/Y H:i', strtotime($account->CreateTime)) : 'N/A' }}" readonly>
                     </div>
 
                     <!-- Last Login (readonly) -->
                     <div class="form-group">
                         <label>Đăng nhập cuối (chỉ đọc)</label>
-                        <input type="text" class="form-control" value="{{ $account->last_login_at ? date('d/m/Y H:i', strtotime($account->last_login_at)) : 'Chưa đăng nhập' }}" readonly>
+                        <input type="text" class="form-control" value="{{ $account->LastLoginTime ? date('d/m/Y H:i', strtotime($account->LastLoginTime)) : 'Chưa đăng nhập' }}" readonly>
                     </div>
                 </div>
 
                 <div class="form-actions">
-                    <a href="{{ route('admin.accounts.show', $account->id) }}" class="btn btn-secondary">❌ Hủy</a>
+                    <a href="{{ route('admin.accounts.show', $account->ID) }}" class="btn btn-secondary">❌ Hủy</a>
                     <button type="submit" class="btn btn-primary">💾 Lưu thay đổi</button>
                 </div>
             </form>

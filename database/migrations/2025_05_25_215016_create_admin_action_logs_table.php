@@ -21,8 +21,8 @@ class CreateAdminActionLogsTable extends Migration
             $table->string('target_type'); // account, character, giftcode, etc.
             $table->string('target_id');
             $table->string('target_name')->nullable();
-            $table->json('old_data')->nullable(); // Data before change
-            $table->json('new_data')->nullable(); // Data after change
+            $table->text('old_data')->nullable(); // Data before change (JSON string)
+            $table->text('new_data')->nullable(); // Data after change (JSON string)
             $table->text('reason')->nullable();
             $table->string('ip_address');
             $table->string('user_agent')->nullable();

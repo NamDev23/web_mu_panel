@@ -29,7 +29,7 @@ class AuthController extends Controller
         ]);
 
         // Check admin user in database
-        $admin = DB::table('t_admin_users')
+        $admin = DB::table('admin_users')
             ->where('username', $request->username)
             ->where('is_active', 1)
             ->first();
@@ -54,7 +54,7 @@ class AuthController extends Controller
             ]);
 
             // Update last login
-            DB::table('t_admin_users')
+            DB::table('admin_users')
                 ->where('id', $admin->id)
                 ->update([
                     'last_login_at' => now(),
@@ -89,10 +89,37 @@ class AuthController extends Controller
         // Get dashboard stats
         $stats = [
             'accounts' => DB::table('t_account')->count(),
-            'characters' => 0, // Will implement later when we have character table
-            'giftcodes' => 0, // Will implement later when we have giftcode table
-            'total_coins' => 0, // Will implement later
+            'characters' => 0,
+            'giftcodes' => 0,
+            'total_coins' => 0,
         ];
+
+        // Get characters count from game database
+        try {
+            $stats['characters'] = DB::connection('game_mysql')
+                ->table('t_roles')
+                ->where('isdel', 0) // Only active characters
+                ->count();
+        } catch (\Exception $e) {
+            $stats['characters'] = 0;
+        }
+
+        // Get giftcodes count
+        try {
+            $stats['giftcodes'] = DB::table('giftcodes')->count();
+        } catch (\Exception $e) {
+            $stats['giftcodes'] = 0;
+        }
+
+        // Get total coins from game database
+        try {
+            $totalCoins = DB::connection('game_mysql')
+                ->table('t_money')
+                ->sum('YuanBao');
+            $stats['total_coins'] = $totalCoins ?? 0;
+        } catch (\Exception $e) {
+            $stats['total_coins'] = 0;
+        }
 
         return view('dashboard', compact('admin', 'stats'));
     }

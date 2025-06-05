@@ -198,10 +198,40 @@
                 min-width: 800px;
             }
         }
+
+        /* Loading indicator */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 </style>
 @endsection
 
 @section('content')
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
         <!-- Success/Error Messages -->
         @if(session('success'))
             <div class="success-message">
@@ -257,7 +287,7 @@
                             <th>Số điện thoại</th>
                             <th>VIP</th>
                             <th>Trạng thái</th>
-                            <th>Tổng nạp</th>
+                            <th>Xu game</th>
                             <th>Nhân vật</th>
                             <th>Đăng ký</th>
                             <th>Thao tác</th>
@@ -266,21 +296,21 @@
                     <tbody>
                         @foreach($accounts as $account)
                             <tr>
-                                <td>{{ $account->id }}</td>
-                                <td><strong>{{ $account->username }}</strong></td>
-                                <td>{{ $account->email }}</td>
-                                <td>{{ $account->phone ?: 'N/A' }}</td>
-                                <td><span class="vip-badge">VIP {{ $account->vip_level }}</span></td>
+                                <td>{{ $account->ID }}</td>
+                                <td><strong>{{ $account->UserName }}</strong></td>
+                                <td>{{ $account->Email ?: 'N/A' }}</td>
+                                <td>N/A</td>
+                                <td><span class="vip-badge">VIP 0</span></td>
                                 <td>
-                                    <span class="status-badge {{ $account->status == 'active' ? 'status-active' : 'status-banned' }}">
-                                        {{ $account->status == 'active' ? 'Hoạt động' : 'Bị khóa' }}
+                                    <span class="status-badge {{ $account->Status == 1 ? 'status-active' : 'status-banned' }}">
+                                        {{ $account->Status == 1 ? 'Hoạt động' : 'Bị khóa' }}
                                     </span>
                                 </td>
-                                <td>{{ number_format($account->total_recharge) }}đ</td>
-                                <td>{{ $account->characters_count }} nhân vật</td>
-                                <td>{{ date('d/m/Y', strtotime($account->created_at)) }}</td>
+                                <td>{{ number_format($account->total_money ?? 0) }} YB</td>
+                                <td>{{ $account->characters_count ?? 0 }} nhân vật</td>
+                                <td>{{ $account->CreateTime ? date('d/m/Y', strtotime($account->CreateTime)) : 'N/A' }}</td>
                                 <td>
-                                    <a href="/admin/accounts/{{ $account->id }}" class="btn btn-info btn-sm">👁️ Xem</a>
+                                    <a href="/admin/accounts/{{ $account->ID }}" class="btn btn-info btn-sm">👁️ Xem</a>
                                 </td>
                             </tr>
                         @endforeach
@@ -296,4 +326,34 @@
                 </div>
             @endif
         </div>
+
+    <script>
+        // Show loading overlay when navigating to account details
+        document.addEventListener('DOMContentLoaded', function() {
+            const accountLinks = document.querySelectorAll('a[href*="/admin/accounts/"]');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+
+            accountLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // Only show loading for detail pages, not current page
+                    if (this.href.includes('/admin/accounts/') && !this.href.includes('/admin/accounts?')) {
+                        loadingOverlay.style.display = 'flex';
+                    }
+                });
+            });
+
+            // Show loading on form submit
+            const searchForm = document.querySelector('.search-form');
+            if (searchForm) {
+                searchForm.addEventListener('submit', function() {
+                    loadingOverlay.style.display = 'flex';
+                });
+            }
+
+            // Hide loading on page load
+            window.addEventListener('load', function() {
+                loadingOverlay.style.display = 'none';
+            });
+        });
+    </script>
 @endsection

@@ -1,6 +1,6 @@
 @extends('layouts.admin')
 
-@section('title', 'Nạp coin thủ công - MU Admin Panel')
+@section('title', 'Nạp xu game - MU Admin Panel')
 
 @section('styles')
 <style>
@@ -242,14 +242,14 @@
         <!-- Recharge Form -->
         <div class="recharge-form">
             <div class="form-header">
-                <h1>💰 Nạp coin thủ công</h1>
-                <p>Nạp coin trực tiếp vào tài khoản người chơi</p>
+                <h1>💰 Nạp xu game</h1>
+                <p>Nạp YuanBao và Money trực tiếp vào tài khoản người chơi</p>
             </div>
 
             <!-- Warning -->
             <div class="warning-box">
                 <h4>⚠️ Lưu ý quan trọng</h4>
-                <p>Việc nạp coin thủ công sẽ được ghi lại đầy đủ trong hệ thống. Hãy kiểm tra kỹ thông tin trước khi thực hiện.</p>
+                <p>Việc nạp xu game sẽ được ghi lại đầy đủ trong hệ thống. Hãy kiểm tra kỹ thông tin trước khi thực hiện.</p>
             </div>
 
             <!-- Form -->
@@ -307,10 +307,10 @@
 
                     <!-- Amount Input -->
                     <div class="form-group">
-                        <label for="amount">Số tiền nạp (VNĐ) *</label>
-                        <input type="number" id="amount" name="amount" class="form-control" 
-                               placeholder="Nhập số tiền..." 
-                               value="{{ old('amount') }}" 
+                        <label for="amount_vnd">Số tiền nạp (VNĐ) *</label>
+                        <input type="number" id="amount_vnd" name="amount_vnd" class="form-control"
+                               placeholder="Nhập số tiền..."
+                               value="{{ old('amount_vnd') }}"
                                min="1000" max="100000000" required>
                         <small style="opacity: 0.7; font-size: 12px;">Tối thiểu 1,000đ - Tối đa 100,000,000đ</small>
                     </div>
@@ -318,20 +318,11 @@
                     <!-- Coins Added -->
                     <div class="form-group">
                         <label for="coins_added">Số coin nhận được *</label>
-                        <input type="number" id="coins_added" name="coins_added" class="form-control" 
-                               placeholder="Số coin sẽ được cộng vào tài khoản..." 
-                               value="{{ old('coins_added') }}" 
+                        <input type="number" id="coins_added" name="coins_added" class="form-control"
+                               placeholder="Số coin sẽ được cộng vào tài khoản..."
+                               value="{{ old('coins_added') }}"
                                min="1" max="1000000" required>
-                        <small style="opacity: 0.7; font-size: 12px;">Số coin thực tế sẽ được cộng vào tài khoản</small>
-                    </div>
-
-                    <!-- Character Name (Optional) -->
-                    <div class="form-group">
-                        <label for="character_name">Tên nhân vật (tùy chọn)</label>
-                        <input type="text" id="character_name" name="character_name" class="form-control" 
-                               placeholder="Nhập tên nhân vật nếu có..." 
-                               value="{{ old('character_name') }}">
-                        <small style="opacity: 0.7; font-size: 12px;">Để trống nếu không liên quan đến nhân vật cụ thể</small>
+                        <small style="opacity: 0.7; font-size: 12px;">Số coin thực tế sẽ được cộng vào tài khoản website</small>
                     </div>
 
                     <!-- Note -->
@@ -348,7 +339,7 @@
                         ❌ Hủy bỏ
                     </a>
                     <button type="submit" class="btn btn-primary" id="submitBtn">
-                        ✅ Nạp coin
+                        ✅ Nạp xu game
                     </button>
                 </div>
             </form>
@@ -376,10 +367,28 @@
         });
 
         function searchAccount(username) {
-            // In a real implementation, this would be an AJAX call
-            // For now, we'll simulate the search
-            console.log('Searching for:', username);
-            hideSearchResults();
+            fetch(`{{ route('admin.coin-recharge.searchAccount') }}?username=${encodeURIComponent(username)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const account = data.account;
+                        document.getElementById('accountDetails').innerHTML = `
+                            <strong>${account.UserName}</strong><br>
+                            Email: ${account.Email || 'N/A'}<br>
+                            Coin hiện tại: ${account.current_coins.toLocaleString()} coin<br>
+                            Tổng đã nạp: ${account.total_recharged.toLocaleString()}đ<br>
+                            Trạng thái: ${account.Status == 1 ? 'Hoạt động' : 'Bị khóa'}
+                        `;
+                        document.getElementById('accountInfo').style.display = 'block';
+                        selectedAccount = account;
+                    } else {
+                        hideSearchResults();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    hideSearchResults();
+                });
         }
 
         function hideSearchResults() {
@@ -393,12 +402,12 @@
 
         // Amount calculation
         function setAmount(amount, coins) {
-            document.getElementById('amount').value = amount;
+            document.getElementById('amount_vnd').value = amount;
             document.getElementById('coins_added').value = coins;
         }
 
         // Auto-calculate coins when amount changes
-        document.getElementById('amount').addEventListener('input', function() {
+        document.getElementById('amount_vnd').addEventListener('input', function() {
             const amount = parseInt(this.value) || 0;
             document.getElementById('coins_added').value = amount; // 1:1 ratio
         });
@@ -406,8 +415,9 @@
         // Form validation
         document.getElementById('rechargeForm').addEventListener('submit', function(e) {
             const username = document.getElementById('username').value.trim();
-            const amount = parseInt(document.getElementById('amount').value);
+            const amount = parseInt(document.getElementById('amount_vnd').value);
             const coins = parseInt(document.getElementById('coins_added').value);
+            const note = document.getElementById('note').value.trim();
 
             if (!username) {
                 alert('Vui lòng nhập tên tài khoản');
@@ -427,8 +437,14 @@
                 return;
             }
 
+            if (!note) {
+                alert('Vui lòng nhập ghi chú');
+                e.preventDefault();
+                return;
+            }
+
             // Confirm before submit
-            if (!confirm(`Bạn có chắc chắn muốn nạp ${coins.toLocaleString()} coin cho tài khoản "${username}"?`)) {
+            if (!confirm(`Bạn có chắc chắn muốn nạp ${coins.toLocaleString()} coin cho tài khoản "${username}"?\n\nSố tiền: ${amount.toLocaleString()}đ\nCoin nhận: ${coins.toLocaleString()}\nGhi chú: ${note}`)) {
                 e.preventDefault();
                 return;
             }
@@ -486,52 +502,29 @@ let searchTimeout;
             selectedAccount = null;
         }
 
-        // Amount calculation
-        function setAmount(amount, coins) {
-            document.getElementById('amount').value = amount;
-            document.getElementById('coins_added').value = coins;
+        // Add Money quick buttons
+        function addMoneyButtons() {
+            const moneySection = document.querySelector('.form-group:has(#money)');
+            if (moneySection && !moneySection.querySelector('.money-calculator')) {
+                const calculator = document.createElement('div');
+                calculator.className = 'amount-calculator money-calculator';
+                calculator.innerHTML = `
+                    <div class="calculator-title">🪙 Money (Zen)</div>
+                    <div class="quick-amounts">
+                        <div class="quick-amount-btn" onclick="setMoney(10000)">10,000 Zen</div>
+                        <div class="quick-amount-btn" onclick="setMoney(50000)">50,000 Zen</div>
+                        <div class="quick-amount-btn" onclick="setMoney(100000)">100,000 Zen</div>
+                        <div class="quick-amount-btn" onclick="setMoney(500000)">500,000 Zen</div>
+                        <div class="quick-amount-btn" onclick="setMoney(1000000)">1,000,000 Zen</div>
+                        <div class="quick-amount-btn" onclick="setMoney(5000000)">5,000,000 Zen</div>
+                    </div>
+                `;
+                moneySection.insertBefore(calculator, moneySection.querySelector('#money'));
+            }
         }
 
-        // Auto-calculate coins when amount changes
-        document.getElementById('amount').addEventListener('input', function() {
-            const amount = parseInt(this.value) || 0;
-            document.getElementById('coins_added').value = amount; // 1:1 ratio
-        });
-
-        // Form validation
-        document.getElementById('rechargeForm').addEventListener('submit', function(e) {
-            const username = document.getElementById('username').value.trim();
-            const amount = parseInt(document.getElementById('amount').value);
-            const coins = parseInt(document.getElementById('coins_added').value);
-
-            if (!username) {
-                alert('Vui lòng nhập tên tài khoản');
-                e.preventDefault();
-                return;
-            }
-
-            if (amount < 1000 || amount > 100000000) {
-                alert('Số tiền phải từ 1,000đ đến 100,000,000đ');
-                e.preventDefault();
-                return;
-            }
-
-            if (coins < 1 || coins > 1000000) {
-                alert('Số coin phải từ 1 đến 1,000,000');
-                e.preventDefault();
-                return;
-            }
-
-            // Confirm before submit
-            if (!confirm(`Bạn có chắc chắn muốn nạp ${coins.toLocaleString()} coin cho tài khoản "${username}"?`)) {
-                e.preventDefault();
-                return;
-            }
-
-            // Show loading state
-            document.getElementById('submitBtn').textContent = '⏳ Đang xử lý...';
-            document.getElementById('submitBtn').disabled = true;
-        });
+        // Initialize money buttons when page loads
+        document.addEventListener('DOMContentLoaded', addMoneyButtons);
 
         // Format number inputs
         document.querySelectorAll('input[type="number"]').forEach(input => {

@@ -359,7 +359,7 @@
         <div class="page-header">
             <div>
                 <h1 class="page-title">💰 Quản lý nạp coin</h1>
-                <p class="page-subtitle">Nạp coin thủ công và theo dõi lịch sử giao dịch</p>
+                <p class="page-subtitle">Nạp coin website cho người chơi và theo dõi lịch sử giao dịch</p>
             </div>
             <a href="{{ route('admin.coin-recharge.create') }}" class="btn btn-primary">➕ Nạp coin mới</a>
         </div>
@@ -402,7 +402,7 @@
                     <label>Loại tìm kiếm</label>
                     <select name="search_type" class="form-control">
                         <option value="username" {{ $searchType == 'username' ? 'selected' : '' }}>Tên tài khoản</option>
-                        <option value="character_name" {{ $searchType == 'character_name' ? 'selected' : '' }}>Tên nhân vật</option>
+                        <option value="email" {{ $searchType == 'email' ? 'selected' : '' }}>Email</option>
                         <option value="transaction_id" {{ $searchType == 'transaction_id' ? 'selected' : '' }}>Mã giao dịch</option>
                     </select>
                 </div>
@@ -417,16 +417,6 @@
                         <option value="completed" {{ $statusFilter == 'completed' ? 'selected' : '' }}>Hoàn thành</option>
                         <option value="pending" {{ $statusFilter == 'pending' ? 'selected' : '' }}>Chờ xử lý</option>
                         <option value="failed" {{ $statusFilter == 'failed' ? 'selected' : '' }}>Thất bại</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Loại giao dịch</label>
-                    <select name="type" class="form-control">
-                        <option value="all" {{ $typeFilter == 'all' ? 'selected' : '' }}>Tất cả</option>
-                        <option value="manual" {{ $typeFilter == 'manual' ? 'selected' : '' }}>Nạp thủ công</option>
-                        <option value="card" {{ $typeFilter == 'card' ? 'selected' : '' }}>Thẻ cào</option>
-                        <option value="bank" {{ $typeFilter == 'bank' ? 'selected' : '' }}>Chuyển khoản</option>
-                        <option value="paypal" {{ $typeFilter == 'paypal' ? 'selected' : '' }}>PayPal</option>
                     </select>
                 </div>
                 <button type="submit" class="btn btn-primary">🔍 Tìm kiếm</button>
@@ -447,7 +437,6 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Tài khoản</th>
-                                <th>Nhân vật</th>
                                 <th>Số tiền</th>
                                 <th>Coin nhận</th>
                                 <th>Loại</th>
@@ -461,9 +450,13 @@
                             @foreach($recharges as $recharge)
                                 <tr>
                                     <td>{{ $recharge->id }}</td>
-                                    <td>{{ $recharge->username }}</td>
-                                    <td>{{ $recharge->character_name ?: 'N/A' }}</td>
-                                    <td><span class="amount-text">{{ number_format($recharge->amount) }}đ</span></td>
+                                    <td>
+                                        <strong>{{ $recharge->username }}</strong>
+                                        @if($recharge->Email)
+                                            <br><small style="opacity: 0.7;">{{ $recharge->Email }}</small>
+                                        @endif
+                                    </td>
+                                    <td><span class="amount-text">{{ number_format($recharge->amount_vnd) }}đ</span></td>
                                     <td><span class="coins-text">{{ number_format($recharge->coins_added) }} coin</span></td>
                                     <td>
                                         <span class="type-badge {{ $recharge->type == 'manual' ? 'type-manual' : '' }}">
@@ -474,20 +467,20 @@
                                         <span class="status-badge status-{{ $recharge->status }}">
                                             @switch($recharge->status)
                                                 @case('completed')
-                                                    Hoàn thành
+                                                    ✅ Hoàn thành
                                                     @break
                                                 @case('pending')
-                                                    Chờ xử lý
+                                                    ⏳ Chờ xử lý
                                                     @break
                                                 @case('failed')
-                                                    Thất bại
+                                                    ❌ Thất bại
                                                     @break
                                                 @default
                                                     {{ $recharge->status }}
                                             @endswitch
                                         </span>
                                     </td>
-                                    <td>{{ $recharge->transaction_id }}</td>
+                                    <td><small>{{ $recharge->transaction_id }}</small></td>
                                     <td>{{ date('d/m/Y H:i', strtotime($recharge->created_at)) }}</td>
                                     <td>
                                         <div class="action-buttons">

@@ -16,54 +16,66 @@ class CharacterController extends Controller
         $searchType = $request->get('search_type', 'character_name');
         $serverFilter = $request->get('server', 'all');
 
-        // Base query for characters from t_roles table
-        $query = DB::table('t_roles as c')
-            ->leftJoin('game_accounts as a', 'c.userid', '=', 'a.id')
+        // Base query for characters from game database
+        $query = DB::connection('game_mysql')->table('t_roles')
             ->select([
-                'c.rid',
-                'c.rname as character_name',
-                'c.userid',
-                'c.level',
-                'c.serverid',
-                'c.occupation',
-                'c.experience',
-                'c.money',
-                'c.regtime',
-                'c.lasttime',
-                'c.logofftime',
-                'c.isdel',
-                'a.username',
-                'a.email',
-                'a.status as account_status'
-            ]);
+                'rid',
+                'rname as character_name',
+                'userid',
+                'level',
+                'serverid',
+                'occupation',
+                'experience',
+                'money',
+                'regtime',
+                'lasttime',
+                'logofftime',
+                'isdel'
+            ])
+            ->where('isdel', 0); // Only show active characters
 
         // Apply search filters
         if ($search) {
             switch ($searchType) {
                 case 'character_name':
-                    $query->where('c.rname', 'like', "%{$search}%");
-                    break;
-                case 'username':
-                    $query->where('a.username', 'like', "%{$search}%");
+                    $query->where('rname', 'like', "%{$search}%");
                     break;
                 case 'character_id':
-                    $query->where('c.rid', $search);
+                    $query->where('rid', $search);
                     break;
                 case 'user_id':
-                    $query->where('c.userid', $search);
+                    $query->where('userid', 'like', "%{$search}%");
                     break;
             }
         }
 
         // Apply server filter
         if ($serverFilter !== 'all') {
-            $query->where('c.serverid', $serverFilter);
+            $query->where('serverid', $serverFilter);
         }
 
-        $characters = $query->orderBy('c.regtime', 'desc')->paginate(20);
+        $characters = $query->orderBy('regtime', 'desc')->paginate(20);
+
+        // Enhance characters with account info
+        foreach ($characters as $character) {
+            // Extract account ID from userid (remove ZT prefix and leading zeros)
+            if (preg_match('/^ZT(\d+)$/', $character->userid, $matches)) {
+                $accountId = (int)$matches[1];
+
+                // Get account info from website database
+                $account = DB::table('t_account')->where('ID', $accountId)->first();
+                $character->username = $account ? $account->UserName : 'Unknown';
+                $character->email = $account ? $account->Email : 'N/A';
+                $character->account_status = $account ? $account->Status : 0;
+            } else {
+                $character->username = 'Unknown';
+                $character->email = 'N/A';
+                $character->account_status = 0;
+            }
+        }
 
         // Get server list for filter
-        $servers = DB::table('t_roles')
+        $servers = DB::connection('game_mysql')->table('t_roles')
             ->select('serverid')
             ->distinct()
             ->orderBy('serverid')
@@ -76,29 +88,31 @@ class CharacterController extends Controller
     {
         $admin = Session::get('admin_user');
 
-        $character = DB::table('t_roles as c')
-            ->leftJoin('game_accounts as a', 'c.userid', '=', 'a.id')
-            ->select([
-                'c.*',
-                'a.username',
-                'a.email',
-                'a.status as account_status',
-                'a.vip_level',
-                'a.current_balance'
-            ])
-            ->where('c.rid', $id)
+        // Get character from game database
+        $character = DB::connection('game_mysql')->table('t_roles')
+            ->where('rid', $id)
             ->first();
 
         if (!$character) {
             return redirect()->route('admin.characters.index')->withErrors(['error' => 'Không tìm thấy nhân vật.']);
         }
 
-        // Get character login history
-        $loginHistory = DB::table('ip_logs')
-            ->where('character_name', $character->rname)
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+        // Get account info from website database
+        if (preg_match('/^ZT(\d+)$/', $character->userid, $matches)) {
+            $accountId = (int)$matches[1];
+            $account = DB::table('t_account')->where('ID', $accountId)->first();
+
+            $character->username = $account ? $account->UserName : 'Unknown';
+            $character->email = $account ? $account->Email : 'N/A';
+            $character->account_status = $account ? $account->Status : 0;
+        } else {
+            $character->username = 'Unknown';
+            $character->email = 'N/A';
+            $character->account_status = 0;
+        }
+
+        // Mock login history for now
+        $loginHistory = [];
 
         return view('admin.characters.show', compact('admin', 'character', 'loginHistory'));
     }
@@ -107,18 +121,25 @@ class CharacterController extends Controller
     {
         $admin = Session::get('admin_user');
 
-        $character = DB::table('t_roles as c')
-            ->leftJoin('game_accounts as a', 'c.userid', '=', 'a.id')
-            ->select([
-                'c.*',
-                'a.username',
-                'a.email'
-            ])
-            ->where('c.rid', $id)
+        // Get character from game database
+        $character = DB::connection('game_mysql')->table('t_roles')
+            ->where('rid', $id)
             ->first();
 
         if (!$character) {
             return redirect()->route('admin.characters.index')->withErrors(['error' => 'Không tìm thấy nhân vật.']);
+        }
+
+        // Get account info from website database
+        if (preg_match('/^ZT(\d+)$/', $character->userid, $matches)) {
+            $accountId = (int)$matches[1];
+            $account = DB::table('t_account')->where('ID', $accountId)->first();
+
+            $character->username = $account ? $account->UserName : 'Unknown';
+            $character->email = $account ? $account->Email : 'N/A';
+        } else {
+            $character->username = 'Unknown';
+            $character->email = 'N/A';
         }
 
         return view('admin.characters.edit', compact('admin', 'character'));
@@ -136,7 +157,7 @@ class CharacterController extends Controller
         ]);
 
         // Get character info before update
-        $character = DB::table('t_roles')->where('rid', $id)->first();
+        $character = DB::connection('game_mysql')->table('t_roles')->where('rid', $id)->first();
         if (!$character) {
             return redirect()->route('admin.characters.index')->withErrors(['error' => 'Không tìm thấy nhân vật.']);
         }
@@ -156,7 +177,7 @@ class CharacterController extends Controller
         ];
 
         // Update character
-        DB::table('t_roles')
+        DB::connection('game_mysql')->table('t_roles')
             ->where('rid', $id)
             ->update([
                 'level' => $request->level,
@@ -189,13 +210,13 @@ class CharacterController extends Controller
         $reason = $request->input('reason', 'Vi phạm quy định');
 
         // Get character info before ban
-        $character = DB::table('t_roles')->where('rid', $id)->first();
+        $character = DB::connection('game_mysql')->table('t_roles')->where('rid', $id)->first();
         if (!$character) {
             return redirect()->route('admin.characters.index')->withErrors(['error' => 'Không tìm thấy nhân vật.']);
         }
 
         // Update character status (isdel = 1 means banned/deleted)
-        DB::table('t_roles')
+        DB::connection('game_mysql')->table('t_roles')
             ->where('rid', $id)
             ->update([
                 'isdel' => 1,
@@ -224,13 +245,13 @@ class CharacterController extends Controller
         $admin = Session::get('admin_user');
 
         // Get character info before unban
-        $character = DB::table('t_roles')->where('rid', $id)->first();
+        $character = DB::connection('game_mysql')->table('t_roles')->where('rid', $id)->first();
         if (!$character) {
             return redirect()->route('admin.characters.index')->withErrors(['error' => 'Không tìm thấy nhân vật.']);
         }
 
         // Update character status (isdel = 0 means active)
-        DB::table('t_roles')
+        DB::connection('game_mysql')->table('t_roles')
             ->where('rid', $id)
             ->update([
                 'isdel' => 0,
@@ -259,13 +280,13 @@ class CharacterController extends Controller
         $admin = Session::get('admin_user');
 
         // Get character info before delete
-        $character = DB::table('t_roles')->where('rid', $id)->first();
+        $character = DB::connection('game_mysql')->table('t_roles')->where('rid', $id)->first();
         if (!$character) {
             return redirect()->route('admin.characters.index')->withErrors(['error' => 'Không tìm thấy nhân vật.']);
         }
 
         // Soft delete character (set isdel = 1)
-        DB::table('t_roles')
+        DB::connection('game_mysql')->table('t_roles')
             ->where('rid', $id)
             ->update([
                 'isdel' => 1,

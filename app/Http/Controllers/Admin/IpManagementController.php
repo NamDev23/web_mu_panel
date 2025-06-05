@@ -18,20 +18,20 @@ class IpManagementController extends Controller
 
         // Base query for IP logs
         $query = DB::table('ip_logs as i')
-            ->leftJoin('game_accounts as a', 'i.username', '=', 'a.username')
+            ->leftJoin('t_account as a', 'i.account_id', '=', 'a.ID')
             ->select([
                 'i.*',
-                'a.id as account_id',
-                'a.email',
-                'a.status as account_status'
+                'a.UserName',
+                'a.Email as email',
+                'a.Status as account_status'
             ]);
 
         // Apply search filters
         if ($search) {
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('i.ip_address', 'like', "%{$search}%")
-                  ->orWhere('i.username', 'like', "%{$search}%")
-                  ->orWhere('i.character_name', 'like', "%{$search}%");
+                    ->orWhere('i.username', 'like', "%{$search}%")
+                    ->orWhere('i.character_name', 'like', "%{$search}%");
             });
         }
 
@@ -76,13 +76,16 @@ class IpManagementController extends Controller
     public function show($ip)
     {
         $admin = Session::get('admin_user');
-        
+
         // Get IP details
         $ipDetails = DB::table('ip_logs')
-            ->select('ip_address', DB::raw('COUNT(*) as total_logins'), 
-                    DB::raw('COUNT(DISTINCT username) as unique_users'),
-                    DB::raw('MIN(created_at) as first_seen'),
-                    DB::raw('MAX(created_at) as last_seen'))
+            ->select(
+                'ip_address',
+                DB::raw('COUNT(*) as total_logins'),
+                DB::raw('COUNT(DISTINCT username) as unique_users'),
+                DB::raw('MIN(created_at) as first_seen'),
+                DB::raw('MAX(created_at) as last_seen')
+            )
             ->where('ip_address', $ip)
             ->groupBy('ip_address')
             ->first();
@@ -93,11 +96,16 @@ class IpManagementController extends Controller
 
         // Get users from this IP
         $users = DB::table('ip_logs as i')
-            ->leftJoin('game_accounts as a', 'i.username', '=', 'a.username')
-            ->select('i.username', 'a.email', 'a.status', DB::raw('COUNT(*) as login_count'), 
-                    DB::raw('MAX(i.created_at) as last_login'))
+            ->leftJoin('t_account as a', 'i.account_id', '=', 'a.ID')
+            ->select(
+                'i.username',
+                'a.Email as email',
+                'a.Status',
+                DB::raw('COUNT(*) as login_count'),
+                DB::raw('MAX(i.created_at) as last_login')
+            )
             ->where('i.ip_address', $ip)
-            ->groupBy('i.username', 'a.email', 'a.status')
+            ->groupBy('i.username', 'a.Email', 'a.Status')
             ->orderBy('login_count', 'desc')
             ->get();
 
@@ -117,7 +125,7 @@ class IpManagementController extends Controller
     public function banIp(Request $request, $ip)
     {
         $admin = Session::get('admin_user');
-        
+
         $request->validate([
             'reason' => 'required|string|max:500',
             'expires_at' => 'nullable|date|after:now',
@@ -133,9 +141,12 @@ class IpManagementController extends Controller
         DB::table('banned_ips')->insert([
             'ip_address' => $ip,
             'reason' => $request->reason,
+            'type' => $request->expires_at ? 'temporary' : 'permanent',
             'banned_by' => $admin['id'],
+            'banned_by_username' => $admin['username'],
             'banned_at' => now(),
             'expires_at' => $request->expires_at,
+            'is_active' => true,
             'created_at' => now(),
             'updated_at' => now()
         ]);
@@ -202,9 +213,9 @@ class IpManagementController extends Controller
 
         // Apply search filter
         if ($search) {
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('b.ip_address', 'like', "%{$search}%")
-                  ->orWhere('b.reason', 'like', "%{$search}%");
+                    ->orWhere('b.reason', 'like', "%{$search}%");
             });
         }
 
@@ -220,10 +231,12 @@ class IpManagementController extends Controller
 
         // Get suspicious IPs (multiple users from same IP)
         $suspiciousIps = DB::table('ip_logs')
-            ->select('ip_address', 
-                    DB::raw('COUNT(DISTINCT username) as user_count'),
-                    DB::raw('COUNT(*) as login_count'),
-                    DB::raw('MAX(created_at) as last_activity'))
+            ->select(
+                'ip_address',
+                DB::raw('COUNT(DISTINCT username) as user_count'),
+                DB::raw('COUNT(*) as login_count'),
+                DB::raw('MAX(created_at) as last_activity')
+            )
             ->groupBy('ip_address')
             ->havingRaw('COUNT(DISTINCT username) >= ?', [$threshold])
             ->orderBy('user_count', 'desc')
@@ -236,7 +249,7 @@ class IpManagementController extends Controller
     {
         $admin = Session::get('admin_user');
         $type = $request->get('type', 'all');
-        
+
         switch ($type) {
             case 'banned':
                 return $this->exportBannedIps();
@@ -250,28 +263,30 @@ class IpManagementController extends Controller
     private function exportAllIps()
     {
         $ips = DB::table('ip_logs')
-            ->select('ip_address', 
-                    DB::raw('COUNT(*) as login_count'),
-                    DB::raw('COUNT(DISTINCT username) as user_count'),
-                    DB::raw('MIN(created_at) as first_seen'),
-                    DB::raw('MAX(created_at) as last_seen'))
+            ->select(
+                'ip_address',
+                DB::raw('COUNT(*) as login_count'),
+                DB::raw('COUNT(DISTINCT username) as user_count'),
+                DB::raw('MIN(created_at) as first_seen'),
+                DB::raw('MAX(created_at) as last_seen')
+            )
             ->groupBy('ip_address')
             ->orderBy('login_count', 'desc')
             ->get();
-        
+
         $filename = 'ip_logs_' . date('Y-m-d') . '.csv';
-        
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ];
-        
-        $callback = function() use ($ips) {
+
+        $callback = function () use ($ips) {
             $file = fopen('php://output', 'w');
-            
+
             // CSV Header
             fputcsv($file, ['IP Address', 'Login Count', 'User Count', 'First Seen', 'Last Seen']);
-            
+
             foreach ($ips as $ip) {
                 fputcsv($file, [
                     $ip->ip_address,
@@ -281,10 +296,10 @@ class IpManagementController extends Controller
                     $ip->last_seen
                 ]);
             }
-            
+
             fclose($file);
         };
-        
+
         return response()->stream($callback, 200, $headers);
     }
 
@@ -294,20 +309,20 @@ class IpManagementController extends Controller
             ->leftJoin('admin_users as a', 'b.banned_by', '=', 'a.id')
             ->select('b.*', 'a.username as admin_username')
             ->get();
-        
+
         $filename = 'banned_ips_' . date('Y-m-d') . '.csv';
-        
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ];
-        
-        $callback = function() use ($bannedIps) {
+
+        $callback = function () use ($bannedIps) {
             $file = fopen('php://output', 'w');
-            
+
             // CSV Header
             fputcsv($file, ['IP Address', 'Reason', 'Banned By', 'Banned At', 'Expires At']);
-            
+
             foreach ($bannedIps as $ip) {
                 fputcsv($file, [
                     $ip->ip_address,
@@ -317,38 +332,40 @@ class IpManagementController extends Controller
                     $ip->expires_at
                 ]);
             }
-            
+
             fclose($file);
         };
-        
+
         return response()->stream($callback, 200, $headers);
     }
 
     private function exportSuspiciousIps()
     {
         $suspiciousIps = DB::table('ip_logs')
-            ->select('ip_address', 
-                    DB::raw('COUNT(DISTINCT username) as user_count'),
-                    DB::raw('COUNT(*) as login_count'),
-                    DB::raw('MAX(created_at) as last_activity'))
+            ->select(
+                'ip_address',
+                DB::raw('COUNT(DISTINCT username) as user_count'),
+                DB::raw('COUNT(*) as login_count'),
+                DB::raw('MAX(created_at) as last_activity')
+            )
             ->groupBy('ip_address')
             ->havingRaw('COUNT(DISTINCT username) >= 5')
             ->orderBy('user_count', 'desc')
             ->get();
-        
+
         $filename = 'suspicious_ips_' . date('Y-m-d') . '.csv';
-        
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ];
-        
-        $callback = function() use ($suspiciousIps) {
+
+        $callback = function () use ($suspiciousIps) {
             $file = fopen('php://output', 'w');
-            
+
             // CSV Header
             fputcsv($file, ['IP Address', 'User Count', 'Login Count', 'Last Activity']);
-            
+
             foreach ($suspiciousIps as $ip) {
                 fputcsv($file, [
                     $ip->ip_address,
@@ -357,10 +374,10 @@ class IpManagementController extends Controller
                     $ip->last_activity
                 ]);
             }
-            
+
             fclose($file);
         };
-        
+
         return response()->stream($callback, 200, $headers);
     }
 

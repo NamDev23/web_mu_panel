@@ -1,6 +1,6 @@
 @extends('layouts.admin')
 
-@section('title', 'Chi tiết giao dịch #{{ $recharge->id }} - MU Admin Panel')
+@section('title', 'Chi tiết tài khoản {{ $account->UserName }} - MU Admin Panel')
 
 @section('styles')
 <style>
@@ -228,8 +228,8 @@
         <!-- Breadcrumb -->
         <div class="breadcrumb">
             <a href="/admin/dashboard">Dashboard</a> /
-            <a href="/admin/coin-recharge">Quản lý nạp coin</a> /
-            Giao dịch #{{ $recharge->id }}
+            <a href="/admin/coin-recharge">Quản lý xu game</a> /
+            {{ $account->UserName }}
         </div>
 
         <!-- Success Message -->
@@ -239,77 +239,48 @@
             </div>
         @endif
 
-        <!-- Transaction Header -->
+        <!-- Account Header -->
         <div class="transaction-header">
             <div class="transaction-info">
-                <h1>💰 Giao dịch #{{ $recharge->id }}</h1>
+                <h1>👤 Tài khoản {{ $account->UserName }}</h1>
                 <div class="transaction-meta">
-                    <span class="status-badge status-{{ $recharge->status }}">
-                        @switch($recharge->status)
-                            @case('completed')
-                                ✅ Hoàn thành
-                                @break
-                            @case('pending')
-                                ⏳ Chờ xử lý
-                                @break
-                            @case('failed')
-                                ❌ Thất bại
-                                @break
-                            @default
-                                {{ $recharge->status }}
-                        @endswitch
+                    <span class="status-badge {{ $account->Status == 1 ? 'status-completed' : 'status-failed' }}">
+                        {{ $account->Status == 1 ? '✅ Hoạt động' : '❌ Bị khóa' }}
                     </span>
-                    <span class="type-badge">{{ ucfirst($recharge->type) }}</span>
-                    <span class="amount-badge">{{ number_format($recharge->coins_added) }} coin</span>
+                    <span class="type-badge">ID: {{ $account->ID }}</span>
+                    <span class="amount-badge">{{ number_format($money->YuanBao) }} YB</span>
                 </div>
             </div>
             <div class="action-buttons">
                 <a href="{{ route('admin.coin-recharge.index') }}" class="btn btn-secondary">⬅️ Quay lại</a>
+                <a href="{{ route('admin.game-money.edit', $account->ID) }}" class="btn btn-primary">✏️ Sửa xu</a>
             </div>
         </div>
 
         <!-- Info Grid -->
         <div class="info-grid">
-            <!-- Transaction Details -->
+            <!-- Money Details -->
             <div class="info-card">
-                <h3 class="card-title">📋 Chi tiết giao dịch</h3>
+                <h3 class="card-title">💰 Chi tiết xu game</h3>
                 <div class="info-row">
-                    <span class="info-label">Mã giao dịch:</span>
-                    <span class="info-value transaction-id">{{ $recharge->transaction_id }}</span>
+                    <span class="info-label">Game User ID:</span>
+                    <span class="info-value transaction-id">{{ $money->userid }}</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Số tiền nạp:</span>
-                    <span class="info-value amount-text">{{ number_format($recharge->amount) }}đ</span>
+                    <span class="info-label">YuanBao:</span>
+                    <span class="info-value coins-text">{{ number_format($money->YuanBao) }} YB</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Coin nhận được:</span>
-                    <span class="info-value coins-text">{{ number_format($recharge->coins_added) }} coin</span>
+                    <span class="info-label">Money (Zen):</span>
+                    <span class="info-value amount-text">{{ number_format($money->Money) }} Zen</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Loại giao dịch:</span>
-                    <span class="info-value">{{ ucfirst($recharge->type) }}</span>
+                    <span class="info-label">Ngày tạo:</span>
+                    <span class="info-value">{{ $money->CreateTime ? date('d/m/Y H:i:s', strtotime($money->CreateTime)) : 'N/A' }}</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Trạng thái:</span>
-                    <span class="info-value">
-                        @switch($recharge->status)
-                            @case('completed')
-                                ✅ Hoàn thành
-                                @break
-                            @case('pending')
-                                ⏳ Chờ xử lý
-                                @break
-                            @case('failed')
-                                ❌ Thất bại
-                                @break
-                            @default
-                                {{ $recharge->status }}
-                        @endswitch
-                    </span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Thời gian tạo:</span>
-                    <span class="info-value">{{ date('d/m/Y H:i:s', strtotime($recharge->created_at)) }}</span>
+                    <span class="info-label">Cập nhật cuối:</span>
+                    <span class="info-value">{{ $money->UpdateTime ? date('d/m/Y H:i:s', strtotime($money->UpdateTime)) : 'N/A' }}</span>
                 </div>
             </div>
 
@@ -317,82 +288,80 @@
             <div class="info-card">
                 <h3 class="card-title">👤 Thông tin tài khoản</h3>
                 <div class="info-row">
+                    <span class="info-label">ID:</span>
+                    <span class="info-value">{{ $account->ID }}</span>
+                </div>
+                <div class="info-row">
                     <span class="info-label">Tên tài khoản:</span>
-                    <span class="info-value">{{ $recharge->username }}</span>
+                    <span class="info-value">{{ $account->UserName }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Email:</span>
-                    <span class="info-value">{{ $recharge->email ?: 'N/A' }}</span>
+                    <span class="info-value">{{ $account->Email ?: 'N/A' }}</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Tên nhân vật:</span>
-                    <span class="info-value">{{ $recharge->character_name ?: 'N/A' }}</span>
+                    <span class="info-label">Trạng thái:</span>
+                    <span class="info-value">{{ $account->Status == 1 ? 'Hoạt động' : 'Bị khóa' }}</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Số dư hiện tại:</span>
-                    <span class="info-value">{{ number_format($recharge->current_balance ?? 0) }} coin</span>
+                    <span class="info-label">Ngày tạo:</span>
+                    <span class="info-value">{{ $account->CreateTime ? date('d/m/Y H:i:s', strtotime($account->CreateTime)) : 'N/A' }}</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Tổng đã nạp:</span>
-                    <span class="info-value">{{ number_format($recharge->total_recharge ?? 0) }}đ</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">VIP Level:</span>
-                    <span class="info-value">VIP {{ $recharge->vip_level ?? 0 }}</span>
+                    <span class="info-label">Đăng nhập cuối:</span>
+                    <span class="info-value">{{ $account->LastLoginTime ? date('d/m/Y H:i:s', strtotime($account->LastLoginTime)) : 'Chưa đăng nhập' }}</span>
                 </div>
             </div>
 
-            <!-- Admin Information -->
+            <!-- Quick Actions -->
             <div class="info-card">
-                <h3 class="card-title">🛡️ Thông tin admin</h3>
-                <div class="info-row">
-                    <span class="info-label">Admin thực hiện:</span>
-                    <span class="info-value">{{ $recharge->admin_username }}</span>
+                <h3 class="card-title">⚡ Thao tác nhanh</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <a href="{{ route('admin.game-money.edit', $account->ID) }}" class="btn btn-primary">
+                        ✏️ Chỉnh sửa xu
+                    </a>
+                    <a href="{{ route('admin.accounts.show', $account->ID) }}" class="btn btn-info">
+                        👁️ Xem tài khoản
+                    </a>
+                    <a href="{{ route('admin.accounts.edit', $account->ID) }}" class="btn btn-warning">
+                        🔧 Sửa tài khoản
+                    </a>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">IP admin:</span>
-                    <span class="info-value">{{ $recharge->admin_ip }}</span>
+                    <span class="info-label">Tổng tài sản:</span>
+                    <span class="info-value coins-text">{{ number_format($money->YuanBao + $money->Money) }}</span>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">Thời gian thực hiện:</span>
-                    <span class="info-value">{{ date('d/m/Y H:i:s', strtotime($recharge->created_at)) }}</span>
-                </div>
-                
-                @if($recharge->note)
-                    <div class="note-section">
-                        <div class="note-title">📝 Ghi chú</div>
-                        <div class="note-content">{{ $recharge->note }}</div>
-                    </div>
-                @endif
             </div>
         </div>
 
-        <!-- Transaction Timeline -->
+        <!-- Account Timeline -->
         <div class="timeline">
-            <h3 class="timeline-title">⏰ Lịch sử giao dịch</h3>
-            
+            <h3 class="timeline-title">⏰ Thông tin tài khoản</h3>
+
             <div class="timeline-item">
-                <div class="timeline-icon">📝</div>
+                <div class="timeline-icon">👤</div>
                 <div class="timeline-content">
-                    <div class="timeline-action">Giao dịch được tạo</div>
-                    <div class="timeline-time">{{ date('d/m/Y H:i:s', strtotime($recharge->created_at)) }}</div>
+                    <div class="timeline-action">Tài khoản được tạo</div>
+                    <div class="timeline-time">{{ $account->CreateTime ? date('d/m/Y H:i:s', strtotime($account->CreateTime)) : 'N/A' }}</div>
                 </div>
             </div>
 
-            @if($recharge->status == 'completed')
+            @if($account->LastLoginTime)
                 <div class="timeline-item">
-                    <div class="timeline-icon">✅</div>
+                    <div class="timeline-icon">🔑</div>
                     <div class="timeline-content">
-                        <div class="timeline-action">Giao dịch hoàn thành - Coin đã được cộng vào tài khoản</div>
-                        <div class="timeline-time">{{ date('d/m/Y H:i:s', strtotime($recharge->updated_at)) }}</div>
+                        <div class="timeline-action">Đăng nhập lần cuối</div>
+                        <div class="timeline-time">{{ date('d/m/Y H:i:s', strtotime($account->LastLoginTime)) }}</div>
                     </div>
                 </div>
-            @elseif($recharge->status == 'failed')
+            @endif
+
+            @if($money->UpdateTime)
                 <div class="timeline-item">
-                    <div class="timeline-icon">❌</div>
+                    <div class="timeline-icon">💰</div>
                     <div class="timeline-content">
-                        <div class="timeline-action">Giao dịch thất bại</div>
-                        <div class="timeline-time">{{ date('d/m/Y H:i:s', strtotime($recharge->updated_at)) }}</div>
+                        <div class="timeline-action">Cập nhật xu game lần cuối</div>
+                        <div class="timeline-time">{{ date('d/m/Y H:i:s', strtotime($money->UpdateTime)) }}</div>
                     </div>
                 </div>
             @endif

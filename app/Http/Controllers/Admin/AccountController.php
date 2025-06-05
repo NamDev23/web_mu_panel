@@ -3,13 +3,20 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\GameDataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
+use App\Models\Account;
 
 class AccountController extends Controller
 {
-    // Constructor removed - authentication handled by middleware
+    protected $gameDataService;
+
+    public function __construct(GameDataService $gameDataService)
+    {
+        $this->gameDataService = $gameDataService;
+    }
 
     public function index(Request $request)
     {
@@ -34,107 +41,60 @@ class AccountController extends Controller
 
         $accounts = $query->orderBy('CreateTime', 'desc')->paginate(20);
 
+        // Optimize: Use GameDataService for batch loading with caching
+        if (!$accounts->isEmpty()) {
+            $accountIds = $accounts->pluck('ID')->toArray();
+            $gameData = $this->gameDataService->getAccountsGameData($accountIds);
+
+            foreach ($accounts as $account) {
+                $data = $gameData[$account->ID] ?? ['characters_count' => 0, 'total_money' => 0];
+                $account->characters_count = $data['characters_count'];
+                $account->total_money = $data['total_money'];
+            }
+        }
+
         return view('admin.accounts.index', compact('admin', 'accounts', 'search', 'searchType'));
     }
 
     public function show($id)
     {
         $admin = Session::get('admin_user');
+
+        // Get account from website database
         $account = DB::table('t_account')->where('ID', $id)->first();
 
         if (!$account) {
-            return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
+            return redirect()->route('admin.accounts.index')
+                ->withErrors(['error' => 'Không tìm thấy tài khoản.']);
         }
 
-        // Get recent login logs from ip_logs table
-        $recentLogins = DB::table('ip_logs')
-            ->where('username', $account->UserName)
-            ->orderBy('created_at', 'desc')
-            ->limit(5)
-            ->get();
+        // Optimize: Use GameDataService with caching
+        $gameData = $this->gameDataService->getAccountGameData($account->ID);
+        $account->characters_count = $gameData['characters_count'];
+        $account->total_money = $gameData['total_money'];
+
+        // Get recent login logs (mock data for now)
+        $recentLogins = [];
 
         return view('admin.accounts.show', compact('admin', 'account', 'recentLogins'));
-    }
-
-    public function ban(Request $request, $id)
-    {
-        $admin = Session::get('admin_user');
-        $reason = $request->input('reason', 'Vi phạm quy định');
-
-        // Get account info before ban
-        $account = DB::table('t_account')->where('ID', $id)->first();
-        if (!$account) {
-            return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
-        }
-
-        // Update account status
-        DB::table('t_account')
-            ->where('ID', $id)
-            ->update([
-                'Status' => 0, // 0 = banned
-                'LastLoginTime' => now()
-            ]);
-
-        // Log admin action
-        $this->logAdminAction(
-            $admin,
-            'ban_account',
-            'account',
-            $id,
-            $account->username,
-            ['status' => $account->status],
-            ['status' => 'banned', 'ban_reason' => $reason],
-            $reason,
-            $request->ip()
-        );
-
-        return redirect()->route('admin.accounts.show', $id)
-            ->with('success', "Đã khóa tài khoản {$account->username}. Lý do: {$reason}");
-    }
-
-    public function unban($id)
-    {
-        $admin = Session::get('admin_user');
-
-        // Get account info before unban
-        $account = DB::table('t_account')->where('ID', $id)->first();
-        if (!$account) {
-            return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
-        }
-
-        // Update account status
-        DB::table('t_account')
-            ->where('ID', $id)
-            ->update([
-                'Status' => 1, // 1 = active
-                'LastLoginTime' => now()
-            ]);
-
-        // Log admin action
-        $this->logAdminAction(
-            $admin,
-            'unban_account',
-            'account',
-            $id,
-            $account->username,
-            ['status' => $account->status, 'ban_reason' => $account->ban_reason],
-            ['status' => 'active', 'ban_reason' => null],
-            'Mở khóa tài khoản',
-            request()->ip()
-        );
-
-        return redirect()->route('admin.accounts.show', $id)
-            ->with('success', "Đã mở khóa tài khoản {$account->username} thành công.");
     }
 
     public function edit($id)
     {
         $admin = Session::get('admin_user');
-        $account = DB::table('game_accounts')->where('id', $id)->first();
+
+        // Get account from website database
+        $account = DB::table('t_account')->where('ID', $id)->first();
 
         if (!$account) {
-            return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
+            return redirect()->route('admin.accounts.index')
+                ->withErrors(['error' => 'Không tìm thấy tài khoản.']);
         }
+
+        // Optimize: Use GameDataService with caching
+        $gameData = $this->gameDataService->getAccountGameData($account->ID);
+        $account->characters_count = $gameData['characters_count'];
+        $account->total_money = $gameData['total_money'];
 
         return view('admin.accounts.edit', compact('admin', 'account'));
     }
@@ -143,63 +103,68 @@ class AccountController extends Controller
     {
         $admin = Session::get('admin_user');
 
-        $request->validate([
-            'email' => 'required|email',
-            'phone' => 'nullable|string|max:20',
-            'full_name' => 'nullable|string|max:255',
-            'vip_level' => 'required|integer|min:0|max:10',
-            'current_balance' => 'required|numeric|min:0',
-        ]);
+        // Get account from website database
+        $account = DB::table('t_account')->where('ID', $id)->first();
 
-        // Get account info before update
-        $account = DB::table('game_accounts')->where('id', $id)->first();
         if (!$account) {
-            return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
+            return redirect()->route('admin.accounts.index')
+                ->withErrors(['error' => 'Không tìm thấy tài khoản.']);
         }
 
-        $oldData = [
-            'email' => $account->email,
-            'phone' => $account->phone,
-            'full_name' => $account->full_name,
-            'vip_level' => $account->vip_level,
-            'current_balance' => $account->current_balance,
+        // Validate input
+        $rules = [
+            'status' => 'required|in:0,1',
+            'email' => 'nullable|email|max:255',
         ];
 
-        $newData = [
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'full_name' => $request->full_name,
-            'vip_level' => $request->vip_level,
-            'current_balance' => $request->current_balance,
+        // Only validate password if provided
+        if ($request->filled('password')) {
+            $rules['password'] = 'string|min:6|confirmed';
+        }
+
+        $request->validate($rules);
+
+        $oldData = (array) $account;
+
+        // Prepare update data
+        $updateData = [
+            'Status' => $request->status,
+            'UpdateTime' => now(),
         ];
+
+        // Update email if provided
+        if ($request->filled('email')) {
+            $updateData['Email'] = $request->email;
+        }
+
+        // Update password if provided
+        if ($request->filled('password')) {
+            $updateData['PassWord'] = md5($request->password); // MU Online typically uses MD5
+        }
 
         // Update account
-        DB::table('game_accounts')
-            ->where('id', $id)
-            ->update([
-                'email' => $request->email,
-                'phone' => $request->phone,
-                'full_name' => $request->full_name,
-                'vip_level' => $request->vip_level,
-                'current_balance' => $request->current_balance,
-                'updated_at' => now()
-            ]);
+        DB::table('t_account')
+            ->where('ID', $id)
+            ->update($updateData);
+
+        // Clear cache for this account
+        $this->gameDataService->clearAccountCache($id);
 
         // Log admin action
         $this->logAdminAction(
             $admin,
-            'edit_account',
+            'update_account',
             'account',
             $id,
-            $account->username,
+            $account->UserName,
             $oldData,
-            $newData,
+            $updateData,
             'Cập nhật thông tin tài khoản',
             $request->ip()
         );
 
         return redirect()->route('admin.accounts.show', $id)
-            ->with('success', "Đã cập nhật thông tin tài khoản {$account->username} thành công.");
+            ->with('success', "Đã cập nhật tài khoản {$account->UserName} thành công.");
     }
 
     private function logAdminAction($admin, $action, $targetType, $targetId, $targetName, $oldData, $newData, $reason, $ip)
@@ -219,5 +184,76 @@ class AccountController extends Controller
             'created_at' => now(),
             'updated_at' => now()
         ]);
+    }
+
+    public function ban(Request $request, $id)
+    {
+        $admin = Session::get('admin_user');
+        $reason = $request->input('reason', 'Vi phạm quy định');
+
+        // Get account info before ban
+        $account = DB::table('t_account')->where('ID', $id)->first();
+        if (!$account) {
+            return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
+        }
+
+        // Update account status
+        DB::table('t_account')
+            ->where('ID', $id)
+            ->update([
+                'Status' => 0, // 0 = banned
+                'UpdateTime' => now()
+            ]);
+
+        // Log admin action
+        $this->logAdminAction(
+            $admin,
+            'ban_account',
+            'account',
+            $id,
+            $account->UserName,
+            ['Status' => $account->Status],
+            ['Status' => 0, 'ban_reason' => $reason],
+            $reason,
+            $request->ip()
+        );
+
+        return redirect()->route('admin.accounts.show', $id)
+            ->with('success', "Đã khóa tài khoản {$account->UserName}. Lý do: {$reason}");
+    }
+
+    public function unban($id)
+    {
+        $admin = Session::get('admin_user');
+
+        // Get account info before unban
+        $account = DB::table('t_account')->where('ID', $id)->first();
+        if (!$account) {
+            return redirect()->route('admin.accounts.index')->withErrors(['error' => 'Không tìm thấy tài khoản.']);
+        }
+
+        // Update account status
+        DB::table('t_account')
+            ->where('ID', $id)
+            ->update([
+                'Status' => 1, // 1 = active
+                'UpdateTime' => now()
+            ]);
+
+        // Log admin action
+        $this->logAdminAction(
+            $admin,
+            'unban_account',
+            'account',
+            $id,
+            $account->UserName,
+            ['Status' => $account->Status],
+            ['Status' => 1],
+            'Mở khóa tài khoản',
+            request()->ip()
+        );
+
+        return redirect()->route('admin.accounts.show', $id)
+            ->with('success', "Đã mở khóa tài khoản {$account->UserName} thành công.");
     }
 }

@@ -79,6 +79,15 @@ Route::group(['middleware' => ['web', 'admin']], function () {
 	// Dashboard
 	Route::get('/admin/dashboard', [App\Http\Controllers\Admin\AuthController::class, 'dashboard'])->name('admin.dashboard');
 
+	// Admin User Management Routes (Temporarily disabled)
+	// Route::get('/admin/admin-users', [App\Http\Controllers\Admin\AdminUserController::class, 'index'])->name('admin.admin-users.index');
+	// Route::get('/admin/admin-users/create', [App\Http\Controllers\Admin\AdminUserController::class, 'create'])->name('admin.admin-users.create');
+	// Route::post('/admin/admin-users', [App\Http\Controllers\Admin\AdminUserController::class, 'store'])->name('admin.admin-users.store');
+	// Route::get('/admin/admin-users/{id}', [App\Http\Controllers\Admin\AdminUserController::class, 'show'])->name('admin.admin-users.show');
+	// Route::get('/admin/admin-users/{id}/edit', [App\Http\Controllers\Admin\AdminUserController::class, 'edit'])->name('admin.admin-users.edit');
+	// Route::post('/admin/admin-users/{id}/update', [App\Http\Controllers\Admin\AdminUserController::class, 'update'])->name('admin.admin-users.update');
+	// Route::post('/admin/admin-users/{id}/toggle-status', [App\Http\Controllers\Admin\AdminUserController::class, 'toggleStatus'])->name('admin.admin-users.toggle-status');
+
 	// Admin Account Management Routes
 	Route::get('/admin/accounts', [App\Http\Controllers\Admin\AccountController::class, 'index'])->name('admin.accounts.index');
 	Route::get('/admin/accounts/{id}', [App\Http\Controllers\Admin\AccountController::class, 'show'])->name('admin.accounts.show');
@@ -86,6 +95,12 @@ Route::group(['middleware' => ['web', 'admin']], function () {
 	Route::post('/admin/accounts/{id}/update', [App\Http\Controllers\Admin\AccountController::class, 'update'])->name('admin.accounts.update');
 	Route::post('/admin/accounts/{id}/ban', [App\Http\Controllers\Admin\AccountController::class, 'ban'])->name('admin.accounts.ban');
 	Route::post('/admin/accounts/{id}/unban', [App\Http\Controllers\Admin\AccountController::class, 'unban'])->name('admin.accounts.unban');
+
+	// Game Money Management Routes
+	Route::get('/admin/game-money', [App\Http\Controllers\Admin\GameMoneyController::class, 'index'])->name('admin.game-money.index');
+	Route::get('/admin/game-money/{id}', [App\Http\Controllers\Admin\GameMoneyController::class, 'show'])->name('admin.game-money.show');
+	Route::get('/admin/game-money/{id}/edit', [App\Http\Controllers\Admin\GameMoneyController::class, 'edit'])->name('admin.game-money.edit');
+	Route::post('/admin/game-money/{id}/update', [App\Http\Controllers\Admin\GameMoneyController::class, 'update'])->name('admin.game-money.update');
 
 	// Admin Character Management Routes
 	Route::get('/admin/characters', [App\Http\Controllers\Admin\CharacterController::class, 'index'])->name('admin.characters.index');
@@ -101,7 +116,7 @@ Route::group(['middleware' => ['web', 'admin']], function () {
 	Route::get('/admin/coin-recharge/create', [App\Http\Controllers\Admin\CoinRechargeController::class, 'create'])->name('admin.coin-recharge.create');
 	Route::post('/admin/coin-recharge', [App\Http\Controllers\Admin\CoinRechargeController::class, 'store'])->name('admin.coin-recharge.store');
 	Route::get('/admin/coin-recharge/{id}', [App\Http\Controllers\Admin\CoinRechargeController::class, 'show'])->name('admin.coin-recharge.show');
-	Route::get('/admin/coin-recharge/search-account', [App\Http\Controllers\Admin\CoinRechargeController::class, 'searchAccount'])->name('admin.coin-recharge.search-account');
+	Route::get('/admin/coin-recharge/search-account', [App\Http\Controllers\Admin\CoinRechargeController::class, 'searchAccount'])->name('admin.coin-recharge.searchAccount');
 	Route::get('/admin/coin-recharge/statistics', [App\Http\Controllers\Admin\CoinRechargeController::class, 'getStatistics'])->name('admin.coin-recharge.statistics');
 
 	// Admin Giftcode Management Routes
@@ -127,7 +142,12 @@ Route::group(['middleware' => ['web', 'admin']], function () {
 	Route::post('/admin/ip-management/{ip}/unban', [App\Http\Controllers\Admin\IpManagementController::class, 'unbanIp'])->name('admin.ip-management.unban');
 	Route::get('/admin/ip-management/export', [App\Http\Controllers\Admin\IpManagementController::class, 'export'])->name('admin.ip-management.export');
 
-	// Admin Logs Routes
+	// Admin System Routes
+	Route::get('/admin/system/performance', [App\Http\Controllers\Admin\SystemController::class, 'performance'])->name('admin.system.performance');
+	Route::post('/admin/system/clear-cache', [App\Http\Controllers\Admin\SystemController::class, 'clearCache'])->name('admin.system.clear-cache');
+	Route::get('/admin/system/logs', [App\Http\Controllers\Admin\SystemController::class, 'logs'])->name('admin.system.logs');
+
+	// Admin Logs Routes (Legacy)
 	Route::get('/admin/logs', [App\Http\Controllers\Admin\AdminLogsController::class, 'index'])->name('admin.logs.index');
 	Route::get('/admin/logs/{id}', [App\Http\Controllers\Admin\AdminLogsController::class, 'show'])->name('admin.logs.show');
 	Route::get('/admin/logs/export', [App\Http\Controllers\Admin\AdminLogsController::class, 'export'])->name('admin.logs.export');

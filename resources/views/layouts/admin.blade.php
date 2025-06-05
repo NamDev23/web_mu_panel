@@ -196,13 +196,15 @@
         <h1>🎮 MU ADMIN PANEL</h1>
         <div class="nav-links">
             <a href="/admin/dashboard" class="{{ request()->is('admin/dashboard') ? 'active' : '' }}">Dashboard</a>
+            <a href="/admin/admin-users" class="{{ request()->is('admin/admin-users*') ? 'active' : '' }}">Admin Users</a>
             <a href="/admin/accounts" class="{{ request()->is('admin/accounts*') ? 'active' : '' }}">Tài khoản</a>
             <a href="/admin/characters" class="{{ request()->is('admin/characters*') ? 'active' : '' }}">Nhân vật</a>
+            <a href="/admin/game-money" class="{{ request()->is('admin/game-money*') ? 'active' : '' }}">Xu Game</a>
             <a href="/admin/coin-recharge" class="{{ request()->is('admin/coin-recharge*') ? 'active' : '' }}">Nạp Coin</a>
             <a href="/admin/giftcodes" class="{{ request()->is('admin/giftcodes*') ? 'active' : '' }}">Giftcode</a>
             <a href="/admin/analytics" class="{{ request()->is('admin/analytics*') ? 'active' : '' }}">Analytics</a>
             <a href="/admin/ip-management" class="{{ request()->is('admin/ip-management*') ? 'active' : '' }}">IP Management</a>
-            <a href="/admin/logs" class="{{ request()->is('admin/logs*') ? 'active' : '' }}">Admin Logs</a>
+            <a href="/admin/system/performance" class="{{ request()->is('admin/system*') ? 'active' : '' }}">System</a>
             <a href="/admin/monthly-cards" class="{{ request()->is('admin/monthly-cards*') ? 'active' : '' }}">Monthly Cards</a>
             <a href="/admin/battle-pass" class="{{ request()->is('admin/battle-pass*') ? 'active' : '' }}">Battle Pass</a>
             <form action="{{ route('admin.logout') }}" method="POST" style="display: inline;">

@@ -42,6 +42,11 @@
         </h2>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+            <a href="/admin/admin-users" class="btn btn-primary" style="display: flex; align-items: center; gap: 10px; padding: 15px 20px; text-decoration: none;">
+                <span style="font-size: 20px;">👨‍💼</span>
+                <span style="font-weight: 500;">Quản lý Admin</span>
+            </a>
+
             <a href="/admin/accounts" class="btn btn-primary" style="display: flex; align-items: center; gap: 10px; padding: 15px 20px; text-decoration: none;">
                 <span style="font-size: 20px;">👥</span>
                 <span style="font-weight: 500;">Quản lý tài khoản</span>

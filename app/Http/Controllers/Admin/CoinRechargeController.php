@@ -15,29 +15,29 @@ class CoinRechargeController extends Controller
         $search = $request->get('search');
         $searchType = $request->get('search_type', 'username');
         $statusFilter = $request->get('status', 'all');
-        $typeFilter = $request->get('type', 'all');
 
-        // Base query for recharge logs
-        $query = DB::table('recharge_logs as r')
-            ->leftJoin('game_accounts as a', 'r.username', '=', 'a.username')
+        // Get recharge logs with account info
+        $query = DB::table('coin_recharge_logs as r')
+            ->leftJoin('t_account as a', 'r.account_id', '=', 'a.ID')
             ->select([
                 'r.*',
-                'a.id as account_id',
-                'a.email',
-                'a.current_balance'
+                'a.UserName',
+                'a.Email',
+                'a.Status as account_status'
             ]);
 
         // Apply search filters
         if ($search) {
             switch ($searchType) {
-                case 'username':
-                    $query->where('r.username', 'like', "%{$search}%");
-                    break;
-                case 'character_name':
-                    $query->where('r.character_name', 'like', "%{$search}%");
+                case 'email':
+                    $query->where('a.Email', 'like', "%{$search}%");
                     break;
                 case 'transaction_id':
                     $query->where('r.transaction_id', 'like', "%{$search}%");
+                    break;
+                case 'username':
+                default:
+                    $query->where('r.username', 'like', "%{$search}%");
                     break;
             }
         }
@@ -47,34 +47,29 @@ class CoinRechargeController extends Controller
             $query->where('r.status', $statusFilter);
         }
 
-        // Apply type filter
-        if ($typeFilter !== 'all') {
-            $query->where('r.type', $typeFilter);
-        }
-
         $recharges = $query->orderBy('r.created_at', 'desc')->paginate(20);
 
         // Get statistics
         $stats = [
-            'today_total' => DB::table('recharge_logs')
+            'today_total' => DB::table('coin_recharge_logs')
                 ->whereDate('created_at', today())
                 ->where('status', 'completed')
-                ->sum('amount'),
-            'today_count' => DB::table('recharge_logs')
+                ->sum('amount_vnd'),
+            'today_count' => DB::table('coin_recharge_logs')
                 ->whereDate('created_at', today())
                 ->where('status', 'completed')
                 ->count(),
-            'month_total' => DB::table('recharge_logs')
+            'month_total' => DB::table('coin_recharge_logs')
                 ->whereMonth('created_at', now()->month)
                 ->whereYear('created_at', now()->year)
                 ->where('status', 'completed')
-                ->sum('amount'),
-            'pending_count' => DB::table('recharge_logs')
+                ->sum('amount_vnd'),
+            'pending_count' => DB::table('coin_recharge_logs')
                 ->where('status', 'pending')
                 ->count()
         ];
 
-        return view('admin.coin-recharge.index', compact('admin', 'recharges', 'search', 'searchType', 'statusFilter', 'typeFilter', 'stats'));
+        return view('admin.coin-recharge.index', compact('admin', 'recharges', 'search', 'searchType', 'statusFilter', 'stats'));
     }
 
     public function create()
@@ -89,14 +84,13 @@ class CoinRechargeController extends Controller
 
         $request->validate([
             'username' => 'required|string|max:50',
-            'amount' => 'required|numeric|min:1000|max:100000000',
+            'amount_vnd' => 'required|numeric|min:1000|max:100000000',
             'coins_added' => 'required|integer|min:1|max:1000000',
-            'character_name' => 'nullable|string|max:50',
-            'note' => 'nullable|string|max:500',
+            'note' => 'required|string|max:500',
         ]);
 
         // Check if account exists
-        $account = DB::table('game_accounts')->where('username', $request->username)->first();
+        $account = DB::table('t_account')->where('UserName', $request->username)->first();
         if (!$account) {
             return redirect()->back()->withErrors(['username' => 'Không tìm thấy tài khoản với username này.']);
         }
@@ -104,44 +98,61 @@ class CoinRechargeController extends Controller
         // Generate transaction ID
         $transactionId = 'MANUAL_' . time() . '_' . rand(1000, 9999);
 
+        // Get or create user coins record
+        $userCoins = DB::table('user_coins')->where('account_id', $account->ID)->first();
+        $oldCoins = $userCoins ? $userCoins->coins : 0;
+        $newCoins = $oldCoins + $request->coins_added;
+
+        // Update or create user coins
+        if ($userCoins) {
+            DB::table('user_coins')
+                ->where('account_id', $account->ID)
+                ->update([
+                    'coins' => $newCoins,
+                    'total_recharged' => DB::raw('total_recharged + ' . $request->amount_vnd),
+                    'updated_at' => now()
+                ]);
+        } else {
+            DB::table('user_coins')->insert([
+                'account_id' => $account->ID,
+                'username' => $account->UserName,
+                'coins' => $newCoins,
+                'total_recharged' => $request->amount_vnd,
+                'total_spent' => 0,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+
         // Create recharge log
-        $rechargeId = DB::table('recharge_logs')->insertGetId([
-            'username' => $request->username,
-            'character_name' => $request->character_name,
-            'amount' => $request->amount,
+        $rechargeId = DB::table('coin_recharge_logs')->insertGetId([
+            'account_id' => $account->ID,
+            'username' => $account->UserName,
+            'transaction_id' => $transactionId,
+            'amount_vnd' => $request->amount_vnd,
             'coins_added' => $request->coins_added,
             'type' => 'manual',
             'status' => 'completed',
-            'note' => $request->note ?: 'Nạp coin thủ công bởi admin',
-            'transaction_id' => $transactionId,
+            'note' => $request->note,
             'admin_id' => $admin['id'],
-            'admin_ip' => $request->ip(),
+            'admin_username' => $admin['username'],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->header('User-Agent'),
+            'completed_at' => now(),
             'created_at' => now(),
             'updated_at' => now()
         ]);
 
-        // Update account balance
-        $oldBalance = $account->current_balance;
-        $newBalance = $oldBalance + $request->coins_added;
-        
-        DB::table('game_accounts')
-            ->where('id', $account->id)
-            ->update([
-                'current_balance' => $newBalance,
-                'total_recharge' => DB::raw('total_recharge + ' . $request->amount),
-                'updated_at' => now()
-            ]);
-
         // Log admin action
         $this->logAdminAction(
             $admin,
-            'manual_recharge',
-            'recharge',
+            'manual_coin_recharge',
+            'coin_recharge',
             $rechargeId,
-            $request->username,
-            ['balance' => $oldBalance],
-            ['balance' => $newBalance, 'amount' => $request->amount, 'coins' => $request->coins_added],
-            $request->note ?: 'Nạp coin thủ công',
+            $account->UserName,
+            ['coins' => $oldCoins],
+            ['coins' => $newCoins, 'amount_vnd' => $request->amount_vnd, 'coins_added' => $request->coins_added],
+            $request->note,
             $request->ip()
         );
 
@@ -152,17 +163,16 @@ class CoinRechargeController extends Controller
     public function show($id)
     {
         $admin = Session::get('admin_user');
-        
-        $recharge = DB::table('recharge_logs as r')
-            ->leftJoin('game_accounts as a', 'r.username', '=', 'a.username')
+
+        // Get recharge log with account info
+        $recharge = DB::table('coin_recharge_logs as r')
+            ->leftJoin('t_account as a', 'r.account_id', '=', 'a.ID')
             ->leftJoin('admin_users as admin', 'r.admin_id', '=', 'admin.id')
             ->select([
                 'r.*',
-                'a.id as account_id',
-                'a.email',
-                'a.current_balance',
-                'a.total_recharge',
-                'a.vip_level',
+                'a.UserName',
+                'a.Email',
+                'a.Status as account_status',
                 'admin.username as admin_username'
             ])
             ->where('r.id', $id)
@@ -172,25 +182,55 @@ class CoinRechargeController extends Controller
             return redirect()->route('admin.coin-recharge.index')->withErrors(['error' => 'Không tìm thấy giao dịch.']);
         }
 
-        return view('admin.coin-recharge.show', compact('admin', 'recharge'));
+        // Get current user coins
+        $userCoins = DB::table('user_coins')->where('account_id', $recharge->account_id)->first();
+        
+        // Get account info for the view
+        $account = DB::table('t_account')->where('ID', $recharge->account_id)->first();
+        
+        // Get money info
+        $gameUserId = 'ZT' . str_pad($account->ID, 4, '0', STR_PAD_LEFT);
+        $money = DB::connection('game_mysql')
+            ->table('t_money')
+            ->where('userid', $gameUserId)
+            ->first();
+
+        // Create default money object if not exists
+        if (!$money) {
+            $money = (object) [
+                'userid' => $gameUserId,
+                'YuanBao' => 0,
+                'Money' => 0,
+                'CreateTime' => null,
+                'UpdateTime' => null
+            ];
+        }
+
+        return view('admin.coin-recharge.show', compact('admin', 'recharge', 'userCoins', 'account', 'money'));
     }
 
     public function searchAccount(Request $request)
     {
         $username = $request->get('username');
-        
+
         if (!$username) {
             return response()->json(['success' => false, 'message' => 'Vui lòng nhập username']);
         }
 
-        $account = DB::table('game_accounts')
-            ->select(['id', 'username', 'email', 'current_balance', 'total_recharge', 'vip_level', 'status'])
-            ->where('username', 'like', "%{$username}%")
+        $account = DB::table('t_account')
+            ->select(['ID', 'UserName', 'Email', 'Status'])
+            ->where('UserName', 'like', "%{$username}%")
             ->first();
 
         if (!$account) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy tài khoản']);
         }
+
+        // Get user coins info
+        $userCoins = DB::table('user_coins')->where('account_id', $account->ID)->first();
+        $account->current_coins = $userCoins ? $userCoins->coins : 0;
+        $account->total_recharged = $userCoins ? $userCoins->total_recharged : 0;
+        $account->total_spent = $userCoins ? $userCoins->total_spent : 0;
 
         return response()->json([
             'success' => true,
@@ -202,7 +242,7 @@ class CoinRechargeController extends Controller
     {
         $period = $request->get('period', 'today'); // today, week, month, year
 
-        $query = DB::table('recharge_logs')->where('status', 'completed');
+        $query = DB::table('coin_recharge_logs')->where('status', 'completed');
 
         switch ($period) {
             case 'today':
@@ -213,7 +253,7 @@ class CoinRechargeController extends Controller
                 break;
             case 'month':
                 $query->whereMonth('created_at', now()->month)
-                      ->whereYear('created_at', now()->year);
+                    ->whereYear('created_at', now()->year);
                 break;
             case 'year':
                 $query->whereYear('created_at', now()->year);
@@ -221,15 +261,15 @@ class CoinRechargeController extends Controller
         }
 
         $stats = [
-            'total_amount' => $query->sum('amount'),
+            'total_amount' => $query->sum('amount_vnd'),
             'total_coins' => $query->sum('coins_added'),
             'total_transactions' => $query->count(),
-            'avg_amount' => $query->avg('amount'),
+            'avg_amount' => $query->avg('amount_vnd'),
         ];
 
         // Get top recharge users
-        $topUsers = DB::table('recharge_logs')
-            ->select('username', DB::raw('SUM(amount) as total_amount'), DB::raw('COUNT(*) as transaction_count'))
+        $topUsers = DB::table('coin_recharge_logs')
+            ->select('username', DB::raw('SUM(amount_vnd) as total_amount'), DB::raw('COUNT(*) as transaction_count'))
             ->where('status', 'completed')
             ->groupBy('username')
             ->orderBy('total_amount', 'desc')

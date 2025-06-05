@@ -1,6 +1,6 @@
 @extends('layouts.admin')
 
-@section('title', 'Chi tiết tài khoản: {{ $account->username }} - MU Admin Panel')
+@section('title', 'Chi tiết tài khoản - MU Admin Panel')
 
 @section('styles')
 <style>
@@ -236,15 +236,11 @@
 @endsection
 
 @section('content')
-</div>
-
-    <!-- Main Content -->
-    <div class="container">
         <!-- Breadcrumb -->
         <div class="breadcrumb">
             <a href="/admin/dashboard">Dashboard</a> /
             <a href="/admin/accounts">Quản lý tài khoản</a> /
-            {{ $account->username }}
+            {{ $account->UserName }}
         </div>
 
         <!-- Success Message -->
@@ -257,25 +253,20 @@
         <!-- Account Header -->
         <div class="account-header">
             <div class="account-info">
-                <h1>👤 {{ $account->username }}</h1>
+                <h1>👤 {{ $account->UserName }}</h1>
                 <div class="account-meta">
-                    <span class="status-badge {{ $account->status == 'active' ? 'status-active' : 'status-banned' }}">
-                        {{ $account->status == 'active' ? 'Hoạt động' : 'Bị khóa' }}
+                    <span class="status-badge {{ $account->Status == 1 ? 'status-active' : 'status-banned' }}">
+                        {{ $account->Status == 1 ? 'Hoạt động' : 'Bị khóa' }}
                     </span>
-                    <span class="vip-badge">VIP {{ $account->vip_level }}</span>
-                    @if($account->status == 'banned' && $account->ban_reason)
-                        <span style="color: #ef4444; font-size: 14px; margin-left: 10px;">
-                            Lý do: {{ $account->ban_reason }}
-                        </span>
-                    @endif
+                    <span class="vip-badge">VIP 0</span>
                 </div>
             </div>
             <div class="action-buttons">
-                <a href="{{ route('admin.accounts.edit', $account->id) }}" class="btn btn-primary">✏️ Chỉnh sửa</a>
-                @if($account->status == 'active')
+                <a href="{{ route('admin.accounts.edit', $account->ID) }}" class="btn btn-primary">✏️ Chỉnh sửa</a>
+                @if($account->Status == 1)
                     <button class="btn btn-danger" onclick="showBanModal()">🚫 Khóa tài khoản</button>
                 @else
-                    <form action="/admin/accounts/{{ $account->id }}/unban" method="POST" style="display: inline;">
+                    <form action="/admin/accounts/{{ $account->ID }}/unban" method="POST" style="display: inline;">
                         @csrf
                         <button type="submit" class="btn btn-success">✅ Mở khóa</button>
                     </form>
@@ -290,56 +281,56 @@
                 <h3 class="card-title">📋 Thông tin cơ bản</h3>
                 <div class="info-row">
                     <span class="info-label">ID tài khoản:</span>
-                    <span class="info-value">{{ $account->id }}</span>
+                    <span class="info-value">{{ $account->ID }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Email:</span>
-                    <span class="info-value">{{ $account->email }}</span>
+                    <span class="info-value">{{ $account->Email ?: 'Chưa cập nhật' }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Số điện thoại:</span>
-                    <span class="info-value">{{ $account->phone ?: 'Chưa cập nhật' }}</span>
+                    <span class="info-value">Chưa cập nhật</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Họ và tên:</span>
-                    <span class="info-value">{{ $account->full_name ?: 'Chưa cập nhật' }}</span>
+                    <span class="info-value">Chưa cập nhật</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Ngày đăng ký:</span>
-                    <span class="info-value">{{ date('d/m/Y H:i', strtotime($account->created_at)) }}</span>
+                    <span class="info-value">{{ $account->CreateTime ? date('d/m/Y H:i', strtotime($account->CreateTime)) : 'N/A' }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Lần đăng nhập cuối:</span>
-                    <span class="info-value">{{ $account->last_login_at ? date('d/m/Y H:i', strtotime($account->last_login_at)) : 'Chưa đăng nhập' }}</span>
+                    <span class="info-value">{{ $account->LastLoginTime ? date('d/m/Y H:i', strtotime($account->LastLoginTime)) : 'Chưa đăng nhập' }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">IP cuối:</span>
-                    <span class="info-value">{{ $account->last_login_ip ?: 'N/A' }}</span>
+                    <span class="info-value">N/A</span>
                 </div>
             </div>
 
             <!-- Financial Info -->
             <div class="info-card">
-                <h3 class="card-title">💰 Thông tin tài chính</h3>
+                <h3 class="card-title">💰 Thông tin game</h3>
                 <div class="info-row">
-                    <span class="info-label">Tổng số tiền nạp:</span>
-                    <span class="info-value">{{ number_format($account->total_recharge) }}đ</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Số dư hiện tại:</span>
-                    <span class="info-value">{{ number_format($account->current_balance) }}đ</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Cấp VIP:</span>
-                    <span class="info-value">VIP {{ $account->vip_level }}</span>
+                    <span class="info-label">Tổng xu game:</span>
+                    <span class="info-value">{{ number_format($account->total_money ?? 0) }} YB</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Số nhân vật:</span>
-                    <span class="info-value">{{ $account->characters_count }} nhân vật</span>
+                    <span class="info-value">{{ $account->characters_count ?? 0 }} nhân vật</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Trạng thái xác thực:</span>
-                    <span class="info-value">{{ $account->is_verified ? '✅ Đã xác thực' : '❌ Chưa xác thực' }}</span>
+                    <span class="info-label">Game User ID:</span>
+                    <span class="info-value">ZT{{ str_pad($account->ID, 4, '0', STR_PAD_LEFT) }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Cấp VIP:</span>
+                    <span class="info-value">VIP 0</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Trạng thái:</span>
+                    <span class="info-value">{{ $account->Status == 1 ? '✅ Hoạt động' : '❌ Bị khóa' }}</span>
                 </div>
             </div>
 
@@ -394,7 +385,7 @@
     <div id="banModal" class="modal">
         <div class="modal-content">
             <h3 style="margin-bottom: 20px;">🚫 Khóa tài khoản</h3>
-            <form action="/admin/accounts/{{ $account->id }}/ban" method="POST">
+            <form action="/admin/accounts/{{ $account->ID }}/ban" method="POST">
                 @csrf
                 <div class="form-group">
                     <label>Lý do khóa tài khoản:</label>

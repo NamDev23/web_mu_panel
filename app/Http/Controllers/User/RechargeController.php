@@ -26,18 +26,24 @@ class RechargeController extends Controller
             return redirect('/user/login')->withErrors(['login' => 'Tài khoản không tồn tại.']);
         }
 
-        // Get user's coin balances
-        $webCoins = $user->getWebCoins();
-        if (!$webCoins) {
+        // Get user's coin balances from user_coins table
+        $userCoins = DB::table('user_coins')->where('account_id', $user->ID)->first();
+        if (!$userCoins) {
             // Create initial coin balance record
-            DB::table('t_web_coins')->insert([
+            DB::table('user_coins')->insert([
                 'account_id' => $user->ID,
-                'balance' => 0,
+                'username' => $user->UserName,
+                'coins' => 0,
                 'total_recharged' => 0,
+                'total_spent' => 0,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
-            $webCoins = (object) ['balance' => 0, 'total_recharged' => 0];
+            $userCoins = (object) [
+                'coins' => 0,
+                'total_recharged' => 0,
+                'total_spent' => 0
+            ];
         }
 
         // Get game coins and characters
@@ -47,17 +53,16 @@ class RechargeController extends Controller
         // Get payment methods configuration
         $paymentMethods = $this->getPaymentMethods();
 
-        // Get recent payment requests from t_coin_transactions
-        $recentPayments = DB::table('t_coin_transactions')
+        // Get recent payment requests from coin_recharge_logs
+        $recentPayments = DB::table('coin_recharge_logs')
             ->where('account_id', $user->ID)
-            ->where('type', 'recharge')
             ->orderBy('created_at', 'desc')
             ->limit(10)
             ->get();
 
         return view('user.recharge.index', compact(
             'user',
-            'webCoins',
+            'userCoins',
             'gameMoney',
             'gameCharacters',
             'paymentMethods',
@@ -80,20 +85,28 @@ class RechargeController extends Controller
         // Calculate coins (1 VND = 1 coin)
         $coinsRequested = $request->card_amount;
 
-        // Create transaction record
-        $transactionId = DB::table('t_coin_transactions')->insertGetId([
+        // Generate transaction ID
+        $transactionId = 'CARD_' . time() . '_' . rand(1000, 9999);
+
+        // Create transaction record in coin_recharge_logs
+        $rechargeId = DB::table('coin_recharge_logs')->insertGetId([
             'account_id' => $user->ID,
-            'type' => 'recharge',
-            'method' => 'card',
-            'amount' => $request->card_amount,
-            'coins' => $coinsRequested,
+            'username' => $user->UserName,
+            'transaction_id' => $transactionId,
+            'amount_vnd' => $request->card_amount,
+            'coins_added' => $coinsRequested,
+            'type' => 'card',
             'status' => 'pending',
-            'details' => json_encode([
+            'note' => "Nạp thẻ cào {$request->card_type} - {$request->card_amount}đ",
+            'payment_method' => $request->card_type,
+            'payment_data' => json_encode([
                 'card_type' => $request->card_type,
                 'card_serial' => $request->card_serial,
                 'card_code' => $request->card_code,
                 'card_amount' => $request->card_amount
             ]),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->header('User-Agent'),
             'created_at' => now(),
             'updated_at' => now()
         ]);
@@ -103,7 +116,7 @@ class RechargeController extends Controller
 
         return redirect()->back()->with(
             'success',
-            "Yêu cầu nạp thẻ cào đã được gửi! Mã giao dịch: #{$transactionId}. " .
+            "Yêu cầu nạp thẻ cào đã được gửi! Mã giao dịch: {$transactionId}. " .
                 "Chúng tôi sẽ xử lý trong vòng 5-10 phút."
         );
     }
@@ -137,54 +150,47 @@ class RechargeController extends Controller
             $proofImagePath = $request->file('proof_image')->store('payment_proofs', 'public');
         }
 
-        // Get current balance
-        $currentBalance = $user->getWebCoins();
-        $balanceBefore = $currentBalance ? $currentBalance->balance : 0;
-        $balanceAfter = $balanceBefore; // Will be updated when admin approves
+        // Generate transaction ID
+        $transactionId = 'BANK_' . time() . '_' . rand(1000, 9999);
 
-        // Create transaction record
-        $transactionId = DB::table('t_coin_transactions')->insertGetId([
+        // Create transaction record in coin_recharge_logs
+        $rechargeId = DB::table('coin_recharge_logs')->insertGetId([
             'account_id' => $user->ID,
-            'type' => 'recharge',
-            'amount' => $request->amount,
-            'balance_before' => $balanceBefore,
-            'balance_after' => $balanceAfter,
-            'description' => "Nạp coin qua chuyển khoản ngân hàng - {$request->amount}đ",
-            'reference_type' => 'bank_transfer',
-            'reference_id' => $user->ID,
-            'processed_by' => null, // Will be set when admin processes
+            'username' => $user->UserName,
+            'transaction_id' => $transactionId,
+            'amount_vnd' => $request->amount,
+            'coins_added' => $coinsRequested,
+            'type' => 'bank',
+            'status' => 'pending',
+            'note' => "Nạp coin qua chuyển khoản ngân hàng - {$request->amount}đ",
+            'payment_method' => 'bank_transfer',
+            'payment_data' => json_encode([
+                'type' => 'bank_transfer',
+                'amount' => $request->amount,
+                'coins_requested' => $coinsRequested,
+                'bank_info' => $qrData,
+                'proof_image' => $proofImagePath,
+                'transaction_ref' => "BANK_{$user->ID}_" . time()
+            ]),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->header('User-Agent'),
             'created_at' => now(),
             'updated_at' => now()
         ]);
 
-        // Store additional details in a separate table or use description field
-        // For now, we'll store bank info in description
-        DB::table('t_coin_transactions')
-            ->where('id', $transactionId)
-            ->update([
-                'description' => json_encode([
-                    'type' => 'bank_transfer',
-                    'amount' => $request->amount,
-                    'coins_requested' => $coinsRequested,
-                    'bank_info' => $qrData,
-                    'proof_image' => $proofImagePath,
-                    'transaction_ref' => "BANK_{$user->ID}_" . time(),
-                    'status' => 'pending'
-                ])
-            ]);
-
         return redirect()->back()->with(
             'success',
-            "Yêu cầu chuyển khoản đã được tạo! Mã giao dịch: #{$transactionId}. " .
+            "Yêu cầu chuyển khoản đã được tạo! Mã giao dịch: {$transactionId}. " .
                 "Vui lòng chuyển khoản theo thông tin được cung cấp."
         )->with('qr_data', $qrData);
     }
 
     public function history(Request $request)
     {
-        $user = Session::get('user_account');
+        $userSession = Session::get('user_account');
+        $user = Account::find($userSession['id']);
 
-        $query = UserPaymentRequest::where('user_id', $user['id']);
+        $query = DB::table('coin_recharge_logs')->where('account_id', $user->ID);
 
         // Filter by status
         if ($request->has('status') && !empty($request->status)) {
@@ -193,7 +199,7 @@ class RechargeController extends Controller
 
         // Filter by payment method
         if ($request->has('method') && !empty($request->method)) {
-            $query->where('payment_method', $request->method);
+            $query->where('type', $request->method);
         }
 
         // Filter by date range
@@ -212,11 +218,17 @@ class RechargeController extends Controller
 
     public function show($id)
     {
-        $user = Session::get('user_account');
+        $userSession = Session::get('user_account');
+        $user = Account::find($userSession['id']);
 
-        $payment = UserPaymentRequest::where('user_id', $user['id'])
+        $payment = DB::table('coin_recharge_logs')
+            ->where('account_id', $user->ID)
             ->where('id', $id)
-            ->firstOrFail();
+            ->first();
+
+        if (!$payment) {
+            abort(404);
+        }
 
         return view('user.recharge.show', compact('payment'));
     }

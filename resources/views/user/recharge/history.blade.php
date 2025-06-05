@@ -134,41 +134,72 @@
                 </thead>
                 <tbody>
                     @foreach($payments as $payment)
-                        <tr style="border-bottom: 1px solid #f3f4f6; {{ $payment->isPending() ? 'background: #fefce8;' : '' }}">
+                        <tr style="border-bottom: 1px solid #f3f4f6; {{ $payment->status == 'pending' ? 'background: #fefce8;' : '' }}">
                             <td style="padding: 1rem;">
                                 <div style="font-family: monospace; font-weight: 600;">#{{ $payment->id }}</div>
-                                @if($payment->transaction_ref)
-                                    <div style="font-size: 0.75rem; color: #6b7280;">{{ $payment->transaction_ref }}</div>
+                                @if($payment->transaction_id)
+                                    <div style="font-size: 0.75rem; color: #6b7280;">{{ $payment->transaction_id }}</div>
                                 @endif
                             </td>
                             <td style="padding: 1rem;">
                                 <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <span style="font-size: 1.25rem;">{{ $payment->getPaymentMethodIcon() }}</span>
-                                    <span>{{ $payment->getPaymentMethodText() }}</span>
+                                    <span style="font-size: 1.25rem;">
+                                        @if($payment->type == 'card')
+                                            💳
+                                        @elseif($payment->type == 'bank')
+                                            🏦
+                                        @else
+                                            💰
+                                        @endif
+                                    </span>
+                                    <span>
+                                        @if($payment->type == 'card')
+                                            Thẻ cào
+                                        @elseif($payment->type == 'bank')
+                                            Chuyển khoản
+                                        @else
+                                            {{ ucfirst($payment->type) }}
+                                        @endif
+                                    </span>
                                 </div>
                             </td>
                             <td style="padding: 1rem;">
-                                <div style="font-weight: 600; color: #374151;">{{ number_format($payment->amount) }}đ</div>
+                                <div style="font-weight: 600; color: #374151;">{{ number_format($payment->amount_vnd) }}đ</div>
                             </td>
                             <td style="padding: 1rem;">
-                                <div style="font-weight: 600; color: #f59e0b;">{{ number_format($payment->coins_requested) }}</div>
+                                <div style="font-weight: 600; color: #f59e0b;">{{ number_format($payment->coins_added) }}</div>
                             </td>
                             <td style="padding: 1rem;">
-                                <span class="status-badge {{ $payment->getStatusBadgeClass() }}">
-                                    {{ $payment->getStatusText() }}
+                                <span class="status-badge
+                                    @if($payment->status == 'pending') status-pending
+                                    @elseif($payment->status == 'processing') status-processing
+                                    @elseif($payment->status == 'completed') status-completed
+                                    @elseif($payment->status == 'rejected') status-rejected
+                                    @endif">
+                                    @if($payment->status == 'pending')
+                                        Chờ xử lý
+                                    @elseif($payment->status == 'processing')
+                                        Đang xử lý
+                                    @elseif($payment->status == 'completed')
+                                        Hoàn thành
+                                    @elseif($payment->status == 'rejected')
+                                        Từ chối
+                                    @else
+                                        {{ ucfirst($payment->status) }}
+                                    @endif
                                 </span>
-                                @if($payment->admin_notes)
+                                @if($payment->note)
                                     <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
-                                        {{ Str::limit($payment->admin_notes, 50) }}
+                                        {{ Str::limit($payment->note, 50) }}
                                     </div>
                                 @endif
                             </td>
                             <td style="padding: 1rem;">
                                 <div style="color: #6b7280; font-size: 0.875rem;">
-                                    {{ $payment->created_at->format('d/m/Y') }}
+                                    {{ \Carbon\Carbon::parse($payment->created_at)->format('d/m/Y') }}
                                 </div>
                                 <div style="color: #6b7280; font-size: 0.75rem;">
-                                    {{ $payment->created_at->format('H:i:s') }}
+                                    {{ \Carbon\Carbon::parse($payment->created_at)->format('H:i:s') }}
                                 </div>
                             </td>
                             <td style="padding: 1rem; text-align: center;">

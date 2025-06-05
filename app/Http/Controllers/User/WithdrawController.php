@@ -19,29 +19,34 @@ class WithdrawController extends Controller
             return redirect('/user/login')->withErrors(['login' => 'Tài khoản không tồn tại.']);
         }
 
-        // Get user's coin balances
-        $webCoins = $user->getWebCoins();
-        if (!$webCoins) {
+        // Get user's coin balances from user_coins table
+        $userCoins = DB::table('user_coins')->where('account_id', $user->ID)->first();
+        if (!$userCoins) {
             // Create initial coin balance record
-            DB::table('t_web_coins')->insert([
+            DB::table('user_coins')->insert([
                 'account_id' => $user->ID,
-                'balance' => 0,
+                'username' => $user->UserName,
+                'coins' => 0,
                 'total_recharged' => 0,
+                'total_spent' => 0,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
-            $webCoins = (object) ['balance' => 0, 'total_recharged' => 0];
+            $userCoins = (object) [
+                'coins' => 0,
+                'total_recharged' => 0,
+                'total_spent' => 0
+            ];
         }
 
         // Get game coins and characters
         $gameMoney = $user->getGameMoney();
         $gameCharacters = $user->getGameCharacters();
 
-        // Get recent withdraw transactions
-        $recentWithdraws = DB::table('t_coin_transactions')
+        // Get recent withdraw transactions from coin_spend_logs
+        $recentWithdraws = DB::table('coin_spend_logs')
             ->where('account_id', $user->ID)
-            ->where('type', 'spend')
-            ->where('reference_type', 'withdraw')
+            ->where('item_type', 'withdraw')
             ->orderBy('created_at', 'desc')
             ->limit(10)
             ->get();
@@ -51,7 +56,7 @@ class WithdrawController extends Controller
 
         return view('user.withdraw.index', compact(
             'user',
-            'webCoins',
+            'userCoins',
             'gameMoney',
             'gameCharacters',
             'recentWithdraws',
@@ -78,10 +83,10 @@ class WithdrawController extends Controller
         $amount = $request->amount;
         $characterId = $request->character_id;
 
-        // Get web coins balance
-        $webCoins = $user->getWebCoins();
-        if (!$webCoins || $webCoins->balance < $amount) {
-            return back()->withErrors(['error' => "Không đủ coin. Bạn có " . number_format($webCoins->balance ?? 0) . " coin."]);
+        // Get user coins balance
+        $userCoins = DB::table('user_coins')->where('account_id', $user->ID)->first();
+        if (!$userCoins || $userCoins->coins < $amount) {
+            return back()->withErrors(['error' => "Không đủ coin. Bạn có " . number_format($userCoins->coins ?? 0) . " coin."]);
         }
 
         // Check if character belongs to user
@@ -92,12 +97,11 @@ class WithdrawController extends Controller
 
         // Check daily withdraw limit (500,000 coins per day)
         $dailyLimit = 500000;
-        $todayWithdraws = DB::table('t_coin_transactions')
+        $todayWithdraws = DB::table('coin_spend_logs')
             ->where('account_id', $user->ID)
-            ->where('type', 'spend')
-            ->where('reference_type', 'withdraw')
+            ->where('item_type', 'withdraw')
             ->whereDate('created_at', today())
-            ->sum('amount');
+            ->sum('coins_spent');
 
         if (($todayWithdraws + $amount) > $dailyLimit) {
             return back()->withErrors(['error' => "Vượt quá giới hạn rút coin hàng ngày (" . number_format($dailyLimit) . " coin). Hôm nay bạn đã rút " . number_format($todayWithdraws) . " coin."]);
@@ -107,46 +111,66 @@ class WithdrawController extends Controller
             DB::beginTransaction();
 
             // Get current balances
-            $webBalanceBefore = $webCoins->balance;
+            $coinBalanceBefore = $userCoins->coins;
             $gameMoney = $user->getGameMoney();
             $gameBalanceBefore = $gameMoney ? $gameMoney->money : 0;
 
-            // Deduct coins from web balance
-            DB::table('t_web_coins')
+            // Deduct coins from user_coins balance
+            DB::table('user_coins')
                 ->where('account_id', $user->ID)
-                ->decrement('balance', $amount);
+                ->update([
+                    'coins' => DB::raw('coins - ' . $amount),
+                    'total_spent' => DB::raw('total_spent + ' . $amount),
+                    'updated_at' => now()
+                ]);
 
-            // Add coins to game account
-            DB::connection('game_mysql')
-                ->table('t_money')
-                ->where('userid', $user->getGameUserId())
-                ->increment('money', $amount);
+            // Add coins to game account (as money, not realmoney)
+            if ($gameMoney) {
+                DB::connection('game_mysql')
+                    ->table('t_money')
+                    ->where('userid', $user->getGameUserId())
+                    ->update([
+                        'money' => DB::raw('money + ' . $amount)
+                    ]);
+            } else {
+                // Create money record if not exists
+                DB::connection('game_mysql')->table('t_money')->insert([
+                    'userid' => $user->getGameUserId(),
+                    'money' => $amount,
+                    'realmoney' => 0,
+                    'giftid' => 0,
+                    'giftjifen' => 0,
+                    'points' => 0,
+                    'specjifen' => 0
+                ]);
+            }
 
             // Get updated balances
-            $webBalanceAfter = $webBalanceBefore - $amount;
+            $coinBalanceAfter = $coinBalanceBefore - $amount;
             $gameBalanceAfter = $gameBalanceBefore + $amount;
 
-            // Create transaction record
-            $transactionId = DB::table('t_coin_transactions')->insertGetId([
+            // Generate transaction ID
+            $transactionId = 'WITHDRAW_' . time() . '_' . rand(1000, 9999);
+
+            // Create transaction record in coin_spend_logs
+            $spendId = DB::table('coin_spend_logs')->insertGetId([
                 'account_id' => $user->ID,
-                'type' => 'spend',
-                'amount' => $amount,
-                'balance_before' => $webBalanceBefore,
-                'balance_after' => $webBalanceAfter,
-                'description' => json_encode([
-                    'type' => 'withdraw_to_game',
+                'username' => $user->UserName,
+                'transaction_id' => $transactionId,
+                'coins_spent' => $amount,
+                'item_type' => 'withdraw',
+                'item_name' => "Rút coin vào game - Nhân vật {$character->rname}",
+                'item_data' => json_encode([
                     'character_id' => $characterId,
                     'character_name' => $character->rname,
                     'game_userid' => $user->getGameUserId(),
-                    'web_balance_before' => $webBalanceBefore,
-                    'web_balance_after' => $webBalanceAfter,
+                    'coin_balance_before' => $coinBalanceBefore,
+                    'coin_balance_after' => $coinBalanceAfter,
                     'game_balance_before' => $gameBalanceBefore,
-                    'game_balance_after' => $gameBalanceAfter,
-                    'status' => 'completed'
+                    'game_balance_after' => $gameBalanceAfter
                 ]),
-                'reference_type' => 'withdraw',
-                'reference_id' => $characterId,
-                'processed_by' => $user->ID,
+                'description' => "Rút {$amount} coin vào nhân vật {$character->rname} trong game",
+                'ip_address' => $request->ip(),
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
@@ -157,7 +181,7 @@ class WithdrawController extends Controller
                 'success',
                 "Rút " . number_format($amount) . " coin thành công! " .
                     "Coin đã được chuyển vào nhân vật '{$character->rname}'. " .
-                    "Số dư web hiện tại: " . number_format($webBalanceAfter) . " coin."
+                    "Số dư coin hiện tại: " . number_format($coinBalanceAfter) . " coin."
             );
         } catch (\Exception $e) {
             DB::rollback();
@@ -165,17 +189,14 @@ class WithdrawController extends Controller
         }
     }
 
-    // TODO: Implement history and show methods with new database structure
-    /*
     public function history(Request $request)
     {
         $userSession = Session::get('user_account');
         $user = Account::find($userSession['id']);
 
-        $query = DB::table('t_coin_transactions')
+        $query = DB::table('coin_spend_logs')
             ->where('account_id', $user->ID)
-            ->where('type', 'spend')
-            ->where('reference_type', 'withdraw');
+            ->where('item_type', 'withdraw');
 
         // Filter by date range
         if ($request->has('date_from') && !empty($request->date_from)) {
@@ -196,11 +217,10 @@ class WithdrawController extends Controller
         $userSession = Session::get('user_account');
         $user = Account::find($userSession['id']);
 
-        $withdraw = DB::table('t_coin_transactions')
+        $withdraw = DB::table('coin_spend_logs')
             ->where('account_id', $user->ID)
+            ->where('item_type', 'withdraw')
             ->where('id', $id)
-            ->where('type', 'spend')
-            ->where('reference_type', 'withdraw')
             ->first();
 
         if (!$withdraw) {
@@ -209,28 +229,24 @@ class WithdrawController extends Controller
 
         return view('user.withdraw.show', compact('withdraw'));
     }
-    */
 
     private function getWithdrawStats($userId)
     {
-        $totalWithdraws = DB::table('t_coin_transactions')
+        $totalWithdraws = DB::table('coin_spend_logs')
             ->where('account_id', $userId)
-            ->where('type', 'spend')
-            ->where('reference_type', 'withdraw')
+            ->where('item_type', 'withdraw')
             ->count();
 
-        $totalAmount = DB::table('t_coin_transactions')
+        $totalAmount = DB::table('coin_spend_logs')
             ->where('account_id', $userId)
-            ->where('type', 'spend')
-            ->where('reference_type', 'withdraw')
-            ->sum('amount');
+            ->where('item_type', 'withdraw')
+            ->sum('coins_spent');
 
-        $todayAmount = DB::table('t_coin_transactions')
+        $todayAmount = DB::table('coin_spend_logs')
             ->where('account_id', $userId)
-            ->where('type', 'spend')
-            ->where('reference_type', 'withdraw')
+            ->where('item_type', 'withdraw')
             ->whereDate('created_at', today())
-            ->sum('amount');
+            ->sum('coins_spent');
 
         $dailyLimit = 500000;
 

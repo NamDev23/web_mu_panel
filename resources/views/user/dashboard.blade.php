@@ -15,6 +15,15 @@
 
 <!-- Account Info Cards -->
 <div class="grid grid-4">
+    <!-- Current Coins -->
+    <div class="card" style="text-align: center;">
+        <div style="background: #fef3c7; color: #d97706; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+            <i class="fas fa-coins" style="font-size: 1.5rem;"></i>
+        </div>
+        <h3 style="font-size: 1.1rem; font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">Coin hiện tại</h3>
+        <p style="color: #d97706; font-weight: 700; font-size: 1.2rem;">{{ number_format($stats['coins']) }}</p>
+    </div>
+
     <!-- Account Status -->
     <div class="card" style="text-align: center;">
         <div style="background: #dcfce7; color: #166534; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
@@ -24,22 +33,13 @@
         <p style="color: #059669; font-weight: 600;">{{ $stats['status'] }}</p>
     </div>
 
-    <!-- Email -->
+    <!-- Total Recharged -->
     <div class="card" style="text-align: center;">
         <div style="background: #dbeafe; color: #1e40af; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
-            <i class="fas fa-envelope" style="font-size: 1.5rem;"></i>
+            <i class="fas fa-chart-line" style="font-size: 1.5rem;"></i>
         </div>
-        <h3 style="font-size: 1.1rem; font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">Email</h3>
-        <p style="color: #6b7280; font-size: 0.9rem;">{{ $stats['email'] ?: 'Chưa cập nhật' }}</p>
-    </div>
-
-    <!-- Created Date -->
-    <div class="card" style="text-align: center;">
-        <div style="background: #f3e8ff; color: #7c3aed; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
-            <i class="fas fa-calendar-plus" style="font-size: 1.5rem;"></i>
-        </div>
-        <h3 style="font-size: 1.1rem; font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">Ngày tạo</h3>
-        <p style="color: #6b7280; font-size: 0.9rem;">{{ $stats['created_at']->format('d/m/Y') }}</p>
+        <h3 style="font-size: 1.1rem; font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">Tổng nạp</h3>
+        <p style="color: #1e40af; font-weight: 600;">{{ number_format($stats['total_recharged']) }} VNĐ</p>
     </div>
 
     <!-- Last Login -->
@@ -77,6 +77,33 @@
             <i class="fas fa-history" style="font-size: 1.5rem;"></i>
             Lịch sử
         </a>
+    </div>
+</div>
+
+<!-- Coin Information -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <i class="fas fa-coins" style="color: #f59e0b;"></i>
+            Thông tin Coin
+        </h2>
+    </div>
+    <div class="grid grid-3">
+        <div style="text-align: center; padding: 1.5rem; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">💰</div>
+            <h3 style="font-size: 1.1rem; font-weight: 600; color: #92400e; margin-bottom: 0.5rem;">Coin hiện tại</h3>
+            <p style="font-size: 1.5rem; font-weight: 700; color: #d97706;">{{ number_format($stats['coins']) }}</p>
+        </div>
+        <div style="text-align: center; padding: 1.5rem; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 12px;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📈</div>
+            <h3 style="font-size: 1.1rem; font-weight: 600; color: #1e40af; margin-bottom: 0.5rem;">Tổng đã nạp</h3>
+            <p style="font-size: 1.2rem; font-weight: 600; color: #2563eb;">{{ number_format($stats['total_recharged']) }} VNĐ</p>
+        </div>
+        <div style="text-align: center; padding: 1.5rem; background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%); border-radius: 12px;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">💸</div>
+            <h3 style="font-size: 1.1rem; font-weight: 600; color: #be185d; margin-bottom: 0.5rem;">Tổng đã tiêu</h3>
+            <p style="font-size: 1.2rem; font-weight: 600; color: #db2777;">{{ number_format($stats['total_spent']) }} Coin</p>
+        </div>
     </div>
 </div>
 

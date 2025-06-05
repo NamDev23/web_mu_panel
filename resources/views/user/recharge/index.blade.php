@@ -15,13 +15,13 @@
         </div>
         <div style="text-align: center;">
             <div style="font-size: 2.5rem; font-weight: 700; color: #3b82f6; margin-bottom: 0.5rem;">
-                {{ number_format($webCoins->balance ?? 0) }}
+                {{ number_format($userCoins->coins ?? 0) }}
             </div>
             <div style="color: #6b7280; font-size: 1rem;">
                 Coin khả dụng trên web
             </div>
             <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">
-                Tổng đã nạp: {{ number_format($webCoins->total_recharged ?? 0) }}đ
+                Tổng đã nạp: {{ number_format($userCoins->total_recharged ?? 0) }}đ
             </div>
         </div>
     </div>
@@ -334,20 +334,13 @@
                 <tbody>
                     @foreach($recentPayments as $payment)
                         @php
-                            // Try to decode description as JSON, fallback to plain text
-                            $details = json_decode($payment->description, true);
-                            if ($details) {
-                                $method = $details['type'] ?? $payment->reference_type;
-                                $coinsRequested = $details['coins_requested'] ?? $payment->amount;
-                                $status = $details['status'] ?? 'pending';
-                            } else {
-                                $method = $payment->reference_type;
-                                $coinsRequested = $payment->amount;
-                                $status = $payment->processed_by ? 'completed' : 'pending';
-                            }
+                            // Use data from coin_recharge_logs table
+                            $method = $payment->type;
+                            $coinsRequested = $payment->coins_added;
+                            $status = $payment->status;
 
-                            $methodIcon = $method == 'bank_transfer' ? '🏦' : '💳';
-                            $methodText = $method == 'bank_transfer' ? 'Chuyển khoản' : 'Thẻ cào';
+                            $methodIcon = $method == 'bank' ? '🏦' : '💳';
+                            $methodText = $method == 'bank' ? 'Chuyển khoản' : 'Thẻ cào';
 
                             $statusClass = '';
                             $statusText = '';
@@ -356,13 +349,17 @@
                                     $statusClass = 'status-pending';
                                     $statusText = 'Đang xử lý';
                                     break;
+                                case 'processing':
+                                    $statusClass = 'status-processing';
+                                    $statusText = 'Đang xử lý';
+                                    break;
                                 case 'completed':
                                     $statusClass = 'status-success';
                                     $statusText = 'Thành công';
                                     break;
-                                case 'failed':
+                                case 'rejected':
                                     $statusClass = 'status-failed';
-                                    $statusText = 'Thất bại';
+                                    $statusText = 'Từ chối';
                                     break;
                                 default:
                                     $statusClass = 'status-pending';
@@ -374,7 +371,7 @@
                             <td style="padding: 0.75rem;">
                                 {{ $methodIcon }} {{ $methodText }}
                             </td>
-                            <td style="padding: 0.75rem; font-weight: 500;">{{ number_format($payment->amount) }}đ</td>
+                            <td style="padding: 0.75rem; font-weight: 500;">{{ number_format($payment->amount_vnd) }}đ</td>
                             <td style="padding: 0.75rem; color: #f59e0b; font-weight: 500;">{{ number_format($coinsRequested) }}</td>
                             <td style="padding: 0.75rem;">
                                 <span class="status-badge {{ $statusClass }}">
